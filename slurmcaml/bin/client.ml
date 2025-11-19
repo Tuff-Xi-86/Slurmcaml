@@ -18,15 +18,159 @@ let read_float_matrix_from_file pathname =
   in
   FloatMatrix (Array.of_list arrayrows)
 
-let process_job out_channel job = Lwt.return ()
+(** [send_one_matrix matrix_type matrix_opp matrix_path out_channel] Reads a
+    single CSV file from [matrix_path], converts it to the specified
+    [matrix_type] ("int" or "float"), and sends the operation metadata and
+    matrix data to [out_channel]. Used for unary operations like "transpose" or
+    "scale". *)
+let send_one_matrix matrix_type matrix_opp matrix_path out_channel =
+  let matrix_list_rep =
+    match matrix_type with
+    | "int" ->
+        IntMatrix
+          (Array.map
+             (fun row -> Array.map int_of_string row)
+             (Csv.to_array (Csv.load matrix_path)))
+    | "float" ->
+        FloatMatrix
+          (Array.map
+             (fun row -> Array.map float_of_string row)
+             (Csv.to_array (Csv.load matrix_path)))
+    | _ -> failwith "Precondition type error in send_one_matrix"
+  in
+  let%lwt () = Lwt_io.fprintl out_channel matrix_type in
+  let%lwt () = Lwt_io.fprintl out_channel matrix_opp in
+  print_matrix matrix_list_rep out_channel
+
+(** [send_two_matrix matrix_type matrix_opp matrix_path_one matrix_path_two
+     out_channel] Reads two CSV files from [matrix_path_one] and
+    [matrix_path_two], converts them to the specified [matrix_type], and sends
+    the operation metadata and both matrices to [out_channel]. Used for binary
+    operations like "add", "subtract", or "multiply". *)
+let send_two_matrix matrix_type matrix_opp matrix_path_one matrix_path_two
+    out_channel =
+  let matrix_one_list_rep =
+    match matrix_type with
+    | "int" ->
+        IntMatrix
+          (Array.map
+             (fun row -> Array.map int_of_string row)
+             (Csv.to_array (Csv.load matrix_path_one)))
+    | "float" ->
+        FloatMatrix
+          (Array.map
+             (fun row -> Array.map float_of_string row)
+             (Csv.to_array (Csv.load matrix_path_one)))
+    | _ -> failwith "Precondition type error in send_two_matrix"
+  in
+  let matrix_two_list_rep =
+    match matrix_type with
+    | "int" ->
+        IntMatrix
+          (Array.map
+             (fun row -> Array.map int_of_string row)
+             (Csv.to_array (Csv.load matrix_path_two)))
+    | "float" ->
+        FloatMatrix
+          (Array.map
+             (fun row -> Array.map float_of_string row)
+             (Csv.to_array (Csv.load matrix_path_two)))
+    | _ -> failwith "Precondition type error in send_two_matrix"
+  in
+  let%lwt () = Lwt_io.fprintl out_channel matrix_type in
+  let%lwt () = Lwt_io.fprintl out_channel matrix_opp in
+  let%lwt () = print_matrix matrix_one_list_rep out_channel in
+  print_matrix matrix_two_list_rep out_channel
+
+(** [split_first_space s] Locates the first space in string [s] and splits the
+    string into a tuple: (word_before_space, rest_of_string). If no space is
+    found, returns (s, ""). *)
+let split_first_space s =
+  match String.index_opt s ' ' with
+  | Some i ->
+      let first = String.sub s 0 i in
+      let rest = String.sub s (i + 1) (String.length s - i - 1) in
+      (first, rest)
+  | None -> (s, "")
+
+(** [process_job out_channel job] Parses a raw job string (e.g., "int add
+    mat1.csv mat2.csv"), validates that the specified files exist and are .csv
+    files, and dispatches the task to either [send_one_matrix] or
+    [send_two_matrix] depending on the operation. Raises Failure if file paths
+    are invalid or operations are unknown. *)
+let process_job out_channel job =
+  let rest_string = ref (String.lowercase_ascii job) in
+  let matrix_type =
+    match split_first_space !rest_string with
+    | "int", rest ->
+        rest_string := rest;
+        "int"
+    | "float", rest ->
+        rest_string := rest;
+        "float"
+    | _ -> failwith "unknown matrix type: must be int or float"
+  in
+  let matrix_opp =
+    match split_first_space !rest_string with
+    | "add", rest ->
+        rest_string := rest;
+        "add"
+    | "subtract", rest ->
+        rest_string := rest;
+        "subtract"
+    | "multiply", rest ->
+        rest_string := rest;
+        "multiply"
+    | "scale", rest ->
+        rest_string := rest;
+        "scale"
+    | "transpose", rest ->
+        rest_string := rest;
+        "transpose"
+    | _ -> failwith "unknown matrix opperation"
+  in
+  let first_matrix_path =
+    match split_first_space !rest_string with
+    | file_path, rest ->
+        if
+          Sys.file_exists file_path
+          && String.lowercase_ascii (Filename.extension file_path) = ".csv"
+        then (
+          rest_string := rest;
+          file_path)
+        else
+          failwith "File path " ^ file_path
+          ^ " does not exist or is not a .csv file"
+  in
+  if matrix_opp = "scale" || matrix_opp = "transpose" then
+    send_one_matrix matrix_type matrix_opp first_matrix_path out_channel
+  else
+    let second_matrix_path =
+      match split_first_space !rest_string with
+      | file_path, rest ->
+          if
+            Sys.file_exists file_path
+            && String.lowercase_ascii (Filename.extension file_path) = ".csv"
+          then (
+            rest_string := rest;
+            file_path)
+          else
+            failwith "File path " ^ file_path
+            ^ " does not exist or is not a .csv file"
+    in
+    send_two_matrix matrix_type matrix_opp first_matrix_path second_matrix_path
+      out_channel
+
 (* job should be a string with first the type of the matrix, which tells you
    which read function to use. then, it should have the operation to perform,
    which tells you whether you should only read one matrix (transpose, scale),
    or 2 matrices for anything else. then, it should give the file path(s). this
    should print to the outchannel first the type of the matrix, then the
-   operation to perform, then the first matrix, using [print_matrix] from matrix
-   utils, then the word "done", then the second matrix if the operation
-   requires, also using [print_matrix], then the word done*)
+   operation to perform, then the matrix using [print_matrix] from matrix utils,
+   then the word "done", then the second matrix if the operation requires, also
+   using [print_matrix], then the word done*)
+
+(** int add path1 path2 -> int add *)
 
 let run_client ipaddr port =
   let head () =
