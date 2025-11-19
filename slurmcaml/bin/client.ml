@@ -26,16 +26,8 @@ let read_float_matrix_from_file pathname =
 let send_one_matrix matrix_type matrix_opp matrix_path out_channel =
   let matrix_list_rep =
     match matrix_type with
-    | "int" ->
-        IntMatrix
-          (Array.map
-             (fun row -> Array.map int_of_string row)
-             (Csv.to_array (Csv.load matrix_path)))
-    | "float" ->
-        FloatMatrix
-          (Array.map
-             (fun row -> Array.map float_of_string row)
-             (Csv.to_array (Csv.load matrix_path)))
+    | "int" -> read_int_matrix_from_file matrix_path
+    | "float" -> read_float_matrix_from_file matrix_path
     | _ -> failwith "Precondition type error in send_one_matrix"
   in
   let%lwt () = Lwt_io.fprintl out_channel matrix_type in
@@ -77,6 +69,7 @@ let send_two_matrix matrix_type matrix_opp matrix_path_one matrix_path_two
              (Csv.to_array (Csv.load matrix_path_two)))
     | _ -> failwith "Precondition type error in send_two_matrix"
   in
+  let%lwt () = Lwt_io.fprintl out_channel "job" in
   let%lwt () = Lwt_io.fprintl out_channel matrix_type in
   let%lwt () = Lwt_io.fprintl out_channel matrix_opp in
   let%lwt () = print_matrix matrix_one_list_rep out_channel in

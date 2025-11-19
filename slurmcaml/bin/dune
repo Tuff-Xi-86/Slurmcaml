@@ -1,5 +1,5 @@
-(executable
- (public_name slurmcaml)
- (name server)
+(executables
+ (public_names server client worker)
+ (names server client worker)
  (libraries slurmcaml lwt.unix csv)
  (preprocess (pps lwt_ppx)))

@@ -45,7 +45,9 @@ let process_job in_channel =
   match valuetype with
   | "int" ->
       let%lwt mat1 = read_int_matrix_input in_channel in
+      let%lwt () = Lwt_io.printf "mat1: %d rows\n%!" (Array.length mat1) in
       let%lwt mat2 = read_int_matrix_input in_channel in
+      let%lwt () = Lwt_io.printf "mat1: %d rows\n%!" (Array.length mat2) in
       Lwt.return (IntJob { aint = mat1; bint = mat2; opi = op })
   | "float" ->
       let%lwt mat1 = read_float_matrix_input in_channel in
@@ -83,31 +85,30 @@ let split_float_job numworkers job =
          { afloat = a_chunks.(i); bfloat = b_chunks.(i); opf }))
 
 let dispatch_job split =
+  let workers = List.of_seq (Hashtbl.to_seq users) in
   match split with
   | IntJobSplit a ->
+      let chunks = Array.to_list a in
+      let work_pairs = List.combine chunks workers in
       Lwt_list.iter_s
-        (fun elem ->
-          Lwt_list.iter_s
-            (fun (key, (username, client_in, client_out, _)) ->
-              let%lwt () = Lwt_io.fprintl client_out "job" in
-              let%lwt () = Lwt_io.fprintl client_out "int" in
-              let%lwt () = Lwt_io.fprintlf client_out "%s" elem.opi in
-              let%lwt () = print_matrix (IntMatrix elem.aint) client_out in
-              print_matrix (IntMatrix elem.bint) client_out)
-            (List.of_seq (Hashtbl.to_seq users)))
-        (Array.to_list a)
+        (fun (chunk, (key, (username, client_in, client_out, _))) ->
+          let%lwt () = Lwt_io.fprintl client_out "job" in
+          let%lwt () = Lwt_io.fprintl client_out "int" in
+          let%lwt () = Lwt_io.fprintlf client_out "%s" chunk.opi in
+          let%lwt () = print_matrix (IntMatrix chunk.aint) client_out in
+          print_matrix (IntMatrix chunk.bint) client_out)
+        work_pairs
   | FloatJobSplit a ->
+      let chunks = Array.to_list a in
+      let work_pairs = List.combine chunks workers in
       Lwt_list.iter_s
-        (fun elem ->
-          Lwt_list.iter_s
-            (fun (key, (username, client_in, client_out, _)) ->
-              let%lwt () = Lwt_io.fprintl client_out "job" in
-              let%lwt () = Lwt_io.fprintl client_out "float" in
-              let%lwt () = Lwt_io.fprintlf client_out "%s" elem.opf in
-              let%lwt () = print_matrix (FloatMatrix elem.afloat) client_out in
-              print_matrix (FloatMatrix elem.bfloat) client_out)
-            (List.of_seq (Hashtbl.to_seq users)))
-        (Array.to_list a)
+        (fun (chunk, (key, (username, client_in, client_out, _))) ->
+          let%lwt () = Lwt_io.fprintl client_out "job" in
+          let%lwt () = Lwt_io.fprintl client_out "int" in
+          let%lwt () = Lwt_io.fprintlf client_out "%s" chunk.opf in
+          let%lwt () = print_matrix (FloatMatrix chunk.afloat) client_out in
+          print_matrix (FloatMatrix chunk.bfloat) client_out)
+        work_pairs
 
 let client_handler client_socket_address (client_in, client_out) =
   let key = sock_addr_to_string client_socket_address in
