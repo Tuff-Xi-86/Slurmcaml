@@ -28,11 +28,11 @@ type expr =
 (*TODO: evaluate functions & implement MAP*)
 
 (* reads a matrix from input channel and *)
-let return_matrix valuetype job channel =
+let return_matrix valuetype op channel =
   let server_in = channel in
   match valuetype with
   | "int" -> (
-      match job with
+      match op with
       | "add" ->
           let%lwt mat1 = read_int_matrix_input server_in in
           let%lwt mat2 = read_int_matrix_input server_in in
@@ -55,7 +55,7 @@ let return_matrix valuetype job channel =
           Lwt.return (IntMatrix (IntegerMatrixOperations.transpose mat))
       | _ -> failwith "not an implemented function")
   | "float" -> (
-      match job with
+      match op with
       | "add" ->
           let%lwt mat1 = read_float_matrix_input server_in in
           let%lwt mat2 = read_float_matrix_input server_in in
@@ -104,7 +104,8 @@ let run_client ipaddr port instanceName =
       | Some job ->
           let%lwt () = Lwt_io.printlf "Received job: %s" job in
           let%lwt valuetype = Lwt_io.read_line server_in in
-          let%lwt res = return_matrix valuetype job server_in in
+          let%lwt op = Lwt_io.read_line server_in in
+          let%lwt res = return_matrix valuetype op server_in in
           let%lwt () = print_matrix res server_out in
           let%lwt () = Lwt_io.fprintl server_out "done" in
           let%lwt () =

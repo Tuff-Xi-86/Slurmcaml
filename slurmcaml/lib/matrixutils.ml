@@ -1,3 +1,5 @@
+open Functions
+
 type result =
   | IntMatrix of int array array
   | FloatMatrix of float array array
@@ -5,12 +7,20 @@ type result =
 let print_matrix res channel =
   match res with
   | IntMatrix mat ->
+      let%lwt () = Lwt_io.fprintl channel (string_of_int (Array.length mat)) in
+      let%lwt () =
+        Lwt_io.fprintl channel (string_of_int (Array.length mat.(0)))
+      in
       Lwt_list.iter_p
         (fun x ->
           Lwt_io.fprintl channel
             (String.concat "," (List.map string_of_int (Array.to_list x))))
         (Array.to_list mat)
   | FloatMatrix mat ->
+      let%lwt () = Lwt_io.fprintl channel (string_of_int (Array.length mat)) in
+      let%lwt () =
+        Lwt_io.fprintl channel (string_of_int (Array.length mat.(0)))
+      in
       Lwt_list.iter_p
         (fun x ->
           Lwt_io.fprintl channel
