@@ -34,8 +34,8 @@ let client_handler client_socket_address (client_in, client_out) =
       Lwt.return_unit
   | Some node_type -> (
       match node_type with
-      | "HEAD" ->
-          let%lwt () = Lwt_io.printlf "HEAD node connected: %s" key in
+      | "CLIENT" ->
+          let%lwt () = Lwt_io.printlf "CLIENT node connected: %s" key in
           let%lwt () =
             head_props := Some (key, client_in, client_out);
             Lwt.return_unit
@@ -44,7 +44,9 @@ let client_handler client_socket_address (client_in, client_out) =
             let%lwt job_opt = Lwt_io.read_line_opt client_in in
             match job_opt with
             | None ->
-                let%lwt () = Lwt_io.printlf "HEAD node %s disconnected." key in
+                let%lwt () =
+                  Lwt_io.printlf "CLIENT node %s disconnected." key
+                in
                 Lwt.return_unit
             | Some "view_jobs" ->
                 let%lwt () = Lwt_io.fprintlf client_out "Current Job Table" in
@@ -78,7 +80,9 @@ let client_handler client_socket_address (client_in, client_out) =
                 let%lwt () = Lwt_io.fprintlf client_out "END_OF_JOBS" in
                 handle_jobs ()
             | Some job ->
-                let%lwt () = Lwt_io.printlf "Received job from HEAD: %s" job in
+                let%lwt () =
+                  Lwt_io.printlf "Received job from client: %s" job
+                in
                 let%lwt () = Lwt.return (Queue.add job jobs) in
                 let%lwt () =
                   Lwt.return (Hashtbl.add job_table job (false, None, None))

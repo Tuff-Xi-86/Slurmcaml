@@ -1,10 +1,10 @@
-let run_head ipaddr port =
+let run_client ipaddr port =
   let head () =
-    let%lwt () = Lwt_io.printlf "Connected to Server as HEAD node" in
+    let%lwt () = Lwt_io.printlf "Connected to Server as CLIENT node" in
     let%lwt server_in, server_out =
       Lwt_io.open_connection (ADDR_INET (Unix.inet_addr_of_string ipaddr, port))
     in
-    let%lwt () = Lwt_io.fprintlf server_out "HEAD" in
+    let%lwt () = Lwt_io.fprintlf server_out "CLIENT" in
     let%lwt () = Lwt_io.flush server_out in
 
     let rec send_job () =
@@ -53,5 +53,5 @@ let _ =
     match Sys.argv.(1) with
     | "head" ->
         if Array.length Sys.argv < 4 then print_usage ()
-        else run_head ipaddr port
+        else run_client ipaddr port
     | _ -> failwith "wrong usage"
