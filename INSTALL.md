@@ -1,15 +1,35 @@
-To install and build the system, run dune build. You may need to install the `csv` and `lwt` packages. Do this with
-```
-$ opam update
-$ opam upgrade
-$ opam install csv lwt
-```
+## Installation and Build
 
-To run the program follow the steps listed below
-(i) on the first terminal run: "dune exec bin/server.exe server 127.0.0.1 5000"
-(ii) on the seperate second terminal run: "dune exec bin/client.exe head 127.0.0.1 5000"
-(iii) on the seperate third terminal run: "dune exec bin/worker.exe worker 127.0.0.1 5000 worker1"
-(optional) (iv) (iii) on the seperate fourth terminal run: "dune exec bin/worker.exe worker 127.0.0.1 5000 worker2"
+To install and build the system, run:
 
-(v) on client(second terminal from step (ii)) send the following instruction: int add mat1.csv mat2.csv
-(vi) outputs are currently posted on the worker nodes (terminals from step (iii and iv))
+dune build
+
+You may need the `csv` and `lwt` packages. Install them with:
+
+opam update
+opam upgrade
+opam install csv lwt
+
+## Running the Program
+
+Open separate terminals and follow the steps below.
+
+1. **Server** (first terminal):
+dune exec bin/server.exe 127.0.0.1 5000
+
+2. **Client** (second terminal):
+dune exec bin/client.exe 127.0.0.1 5000
+
+3. **Worker 1** (third terminal):
+dune exec bin/worker.exe 127.0.0.1 5000 worker1
+
+4. **Worker 2** (optional, fourth terminal):
+dune exec bin/worker.exe 127.0.0.1 5000 worker2
+
+## Sending a Job
+
+From the client terminal (step 2), run:
+
+int add mat1.csv mat2.csv
+
+The outputs will appear on the worker terminals (steps 3 and 4).
