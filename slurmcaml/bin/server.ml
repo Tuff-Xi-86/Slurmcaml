@@ -138,17 +138,33 @@ let client_handler client_socket_address (client_in, client_out) =
                 in
                 Lwt.return_unit
             | Some "job" ->
-                let%lwt () = Lwt_io.printl "Received job from client" in
+                let%lwt () = Lwt_io.printlf "Received job from %s" key in
                 let%lwt job = process_job client_in in
-                let split =
-                  match job with
-                  | IntJob i -> split_int_job (Hashtbl.length users) i
-                  | FloatJob j -> split_float_job (Hashtbl.length users) j
-                in
-                let%lwt () = dispatch_job split in
+                if Hashtbl.length users = 0 then
+                  let%lwt () =
+                    Lwt_io.printl "ERROR: There are no worker nodes available"
+                  in
+                  let%lwt () =
+                    Lwt_io.fprintl client_out
+                      "There are no worker nodes available, please try again \
+                       later"
+                  in
+                  handle_jobs ()
+                else
+                  let split =
+                    match job with
+                    | IntJob i -> split_int_job (Hashtbl.length users) i
+                    | FloatJob j -> split_float_job (Hashtbl.length users) j
+                  in
+                  let%lwt () = dispatch_job split in
 
+                  handle_jobs ()
+            | Some command ->
+                let%lwt () = Lwt_io.printlf "Received job from %s\n" key in
+                let%lwt () =
+                  Lwt_io.printlf "ERROR: '%s' is not a valid command" command
+                in
                 handle_jobs ()
-            | Some _ -> failwith "not implemented"
           in
           handle_jobs ()
       | instanceName ->
@@ -222,12 +238,20 @@ let client_handler client_socket_address (client_in, client_out) =
 
 let run_server ipaddr port =
   let server () =
-    let%lwt () = Lwt_io.printlf "I am the server." in
+    let%lwt () = Lwt_io.printlf "Starting Server..." in
     let%lwt running_server =
-      Lwt_io.establish_server_with_client_address
-        (ADDR_INET (Unix.inet_addr_of_string ipaddr, port))
-        client_handler
+      try%lwt
+        Lwt_io.establish_server_with_client_address
+          (ADDR_INET (Unix.inet_addr_of_string ipaddr, port))
+          client_handler
+      with exn ->
+        let%lwt () =
+          Lwt_io.printl
+            (Printf.sprintf "Failed to connect to server at %s:%d" ipaddr port)
+        in
+        exit 0
     in
+    let%lwt () = Lwt_io.printlf "Server Started!" in
     let never_resolved, _ = Lwt.wait () in
     never_resolved
   in
@@ -247,7 +271,6 @@ let _ =
           Printf.printf "Invalid port number: %s\n" Sys.argv.(2);
           exit 1
     in
-
     print_endline ("Using IP: " ^ ipaddr ^ " Port: " ^ string_of_int port);
     run_server ipaddr port
 (* | "head" -> if Array.length Sys.argv < 4 then print_usage () else run_head

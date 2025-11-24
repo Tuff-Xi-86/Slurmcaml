@@ -1,5 +1,7 @@
 open Slurmcaml.Matrixutils
 
+exception InvalidMatrixArgument of string
+
 (* reads int matrix from a file and returns the matrix, # rows, # columns,
    valuetype*)
 let read_int_matrix_from_file pathname =
@@ -104,6 +106,7 @@ let process_job out_channel job =
   let rest_string = ref (String.lowercase_ascii job) in
   let matrix_type =
     match split_first_space !rest_string with
+    | "", x -> raise (InvalidMatrixArgument "Missing argument for matrix type")
     | "int", rest ->
         rest_string := rest;
         "int"
@@ -111,11 +114,13 @@ let process_job out_channel job =
         rest_string := rest;
         "float"
     | _ ->
-        print_endline "unknown matrix type: must be int or float";
-        exit 0
+        raise
+          (InvalidMatrixArgument "unknown matrix type: must be int or float")
   in
   let matrix_opp =
     match split_first_space !rest_string with
+    | "", x ->
+        raise (InvalidMatrixArgument "Missing argument for matrix opperation")
     | "add", rest ->
         rest_string := rest;
         "add"
@@ -131,12 +136,11 @@ let process_job out_channel job =
     | "transpose", rest ->
         rest_string := rest;
         "transpose"
-    | _ ->
-        print_endline "unknown matrix opperation";
-        exit 0
+    | _ -> raise (InvalidMatrixArgument "unknown matrix opperation")
   in
   let first_matrix_path =
     match split_first_space !rest_string with
+    | "", x -> raise (InvalidMatrixArgument "Missing Path for first matrix")
     | file_path, rest ->
         if
           Sys.file_exists file_path
@@ -144,16 +148,19 @@ let process_job out_channel job =
         then (
           rest_string := rest;
           file_path)
-        else (
-          print_endline
-            ("File path " ^ file_path ^ " does not exist or is not a .csv file");
-          exit 0)
+        else
+          raise
+            (InvalidMatrixArgument
+               ("File path " ^ file_path
+              ^ " does not exist or is not a .csv file"))
   in
   if matrix_opp = "scale" || matrix_opp = "transpose" then
+    let%lwt () = Lwt_io.printlf "Sending job: %s" job in
     send_one_matrix matrix_type matrix_opp first_matrix_path out_channel
   else
     let second_matrix_path =
       match split_first_space !rest_string with
+      | "", x -> raise (InvalidMatrixArgument "Missing Path for second matrix")
       | file_path, rest ->
           if
             Sys.file_exists file_path
@@ -161,12 +168,13 @@ let process_job out_channel job =
           then (
             rest_string := rest;
             file_path)
-          else (
-            print_endline
-              ("File path " ^ file_path
-             ^ " does not exist or is not a .csv file");
-            exit 0)
+          else
+            raise
+              (InvalidMatrixArgument
+                 ("File path " ^ file_path
+                ^ " does not exist or is not a .csv file"))
     in
+    let%lwt () = Lwt_io.printlf "Sending job: %s" job in
     send_two_matrix matrix_type matrix_opp first_matrix_path second_matrix_path
       out_channel
 
@@ -174,8 +182,18 @@ let client_loop server_in server_out =
   let rec send_job () =
     match%lwt Lwt_io.read_line_opt Lwt_io.stdin with
     | Some job ->
-        let%lwt () = Lwt_io.printlf "➡️ Sending job: %s" job in
-        let%lwt () = process_job server_out job in
+        let%lwt () = Lwt_io.printlf "Attempting to sending job: %s" job in
+        let%lwt () =
+          try process_job server_out job
+          with InvalidMatrixArgument x ->
+            let%lwt () = Lwt_io.printl ("Job Failed: " ^ x) in
+            let%lwt () =
+              Lwt_io.printl
+                "Usage: <int, float> Matrix_Opperation Matrix_CSV_Path_One \
+                 Optional_Matrix_CSV_Path_One"
+            in
+            Lwt.return_unit
+        in
         let%lwt () = Lwt_io.flush server_out in
         send_job ()
     | None -> Lwt_io.printl "Input closed (EOF). Stopping sends."
