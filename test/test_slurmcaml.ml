@@ -13,9 +13,3 @@ let tests =
        ]
 
 let _ = run_test_tt_main tests
-
-let equal_length a1 a2 =
-  if Array.length a1.(0) <> Array.length a2.(0) then (
-    print_endline "Length of Arrays are not the same and cannot be added!";
-    exit 1)
-  else ()

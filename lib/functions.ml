@@ -15,18 +15,12 @@ module IntegerMatrixOperations : MatrixOperations with type t = int = struct
   type t = int
   (*check for equal length in matrix before running*)
 
-  let equal_length a1 a2 =
-    let row1 = Array.length a1.(0) in
-    let row2 = Array.length a2.(0) in
-    if row1 <> row2 then (
-      print_endline "Length of Arrays are not the same and cannot be added!";
-      exit 1)
-    else
-      for i = 0 to rows1 - 1 do
-        if Array.length m1.(i) <> Array.length m2.(i) then (
-          Printf.printf "Row %d has different length in the two matrices!\n" i;
-          exit 1)
-      done
+  (* let equal_length a1 a2 = let row1 = Array.length a1.(0) in let row2 =
+     Array.length a2.(0) in if row1 <> row2 then ( print_endline "Length of
+     Arrays are not the same and cannot be added!"; exit 1) else for i = 0 to
+     row1 - 1 do if Array.length row1.(i) <> Array.length row2.(i) then (
+     Printf.printf "Row %d has different length in the two matrices!\n" i; exit
+     1) done *)
 
   (* HN can't send the whole matrix, has to only send the specific rows to
      operate on*)
@@ -41,13 +35,13 @@ module IntegerMatrixOperations : MatrixOperations with type t = int = struct
     Array.init length elt
 
   let add mat1 mat2 =
-    let () = equal_length mat1 mat2 in
+    (* let () = equal_length mat1 mat2 in *)
     let length = Array.length mat1 in
     let calc i = add_rows mat1.(i) mat2.(i) in
     Array.init length calc
 
   let subtract mat1 mat2 =
-    let () = equal_length mat1 mat2 in
+    (* let () = equal_length mat1 mat2 in *)
     let length = Array.length mat1 in
     let calc i = subtract_rows mat1.(i) mat2.(i) in
     Array.init length calc
