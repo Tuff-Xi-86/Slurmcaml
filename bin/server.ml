@@ -123,9 +123,6 @@ let determine_assignments job =
   assignment_table*)
 let fill_matrix_int (res : int array array) ((first_row, last_row) : 'a * 'b)
     (old_array : int array array) =
-  print_endline "entering fill matrix";
-  print_int first_row;
-  print_int last_row;
   Array.iteri
     (fun num_row matrix_row -> old_array.(num_row + first_row) <- matrix_row)
     res
@@ -175,11 +172,45 @@ let dispatch_job split =
       Lwt_list.iter_s
         (fun (chunk, (key, (username, client_in, client_out, _))) ->
           let%lwt () = Lwt_io.fprintl client_out "job" in
-          let%lwt () = Lwt_io.fprintl client_out "int" in
+          let%lwt () = Lwt_io.fprintl client_out "float" in
           let%lwt () = Lwt_io.fprintlf client_out "%s" chunk.opf in
           let%lwt () = print_matrix (FloatMatrix chunk.afloat) client_out in
           print_matrix (FloatMatrix chunk.bfloat) client_out)
         work_pairs
+
+let rec handle_jobs_from_client client_in client_out key =
+  let%lwt job_opt = Lwt_io.read_line_opt client_in in
+  match job_opt with
+  | None ->
+      let%lwt () = Lwt_io.printlf "CLIENT node %s disconnected." key in
+      Lwt.return_unit
+  | Some "job" ->
+      let%lwt () = Lwt_io.printlf "Received job from %s" key in
+      let%lwt job = process_job client_in in
+      if Hashtbl.length users = 0 then
+        let%lwt () =
+          Lwt_io.printl "ERROR: There are no worker nodes available"
+        in
+        let%lwt () =
+          Lwt_io.fprintl client_out
+            "There are no worker nodes available, please try again  later"
+        in
+        handle_jobs_from_client client_in client_out key
+      else
+        let () = assignment_table := determine_assignments job in
+        let split =
+          match job with
+          | IntJob i -> split_int_job (Hashtbl.length users) i
+          | FloatJob j -> split_float_job (Hashtbl.length users) j
+        in
+        let%lwt () = dispatch_job split in
+        handle_jobs_from_client client_in client_out key
+  | Some command ->
+      let%lwt () = Lwt_io.printlf "Received job from %s\n" key in
+      let%lwt () =
+        Lwt_io.printlf "ERROR: '%s' is not a valid command" command
+      in
+      handle_jobs_from_client client_in client_out key
 
 let client_handler client_socket_address (client_in, client_out) =
   let key = sock_addr_to_string client_socket_address in
@@ -198,46 +229,7 @@ let client_handler client_socket_address (client_in, client_out) =
             head_props := client_out;
             Lwt.return_unit
           in
-          let rec handle_jobs () =
-            let%lwt job_opt = Lwt_io.read_line_opt client_in in
-            match job_opt with
-            | None ->
-                let%lwt () =
-                  Lwt_io.printlf "CLIENT node %s disconnected." key
-                in
-                Lwt.return_unit
-            | Some "job" ->
-                let%lwt () = Lwt_io.printlf "Received job from %s" key in
-                let%lwt job = process_job client_in in
-                if Hashtbl.length users = 0 then
-                  let%lwt () =
-                    Lwt_io.printl "ERROR: There are no worker nodes available"
-                  in
-                  let%lwt () =
-                    Lwt_io.fprintl client_out
-                      "There are no worker nodes available, please try again  \
-                       later"
-                  in
-                  handle_jobs ()
-                else
-                  let () = assignment_table := determine_assignments job in
-                  let split =
-                    match job with
-                    | IntJob i -> split_int_job (Hashtbl.length users) i
-                    | FloatJob j -> split_float_job (Hashtbl.length users) j
-                  in
-                  let%lwt () = dispatch_job split in
-                  (* determine assignments and then update the table with jobid,
-                     assignments *)
-                  handle_jobs ()
-            | Some command ->
-                let%lwt () = Lwt_io.printlf "Received job from %s\n" key in
-                let%lwt () =
-                  Lwt_io.printlf "ERROR: '%s' is not a valid command" command
-                in
-                handle_jobs ()
-          in
-          handle_jobs ()
+          handle_jobs_from_client client_in client_out key
       | instanceName ->
           let username = instanceName in
           let%lwt () =
@@ -264,7 +256,13 @@ let client_handler client_socket_address (client_in, client_out) =
                       (IntJobType, tbl, IntMatrix work, counter + 1);
                     let%lwt () =
                       if counter + 1 = Hashtbl.length users then
-                        print_matrix (IntMatrix work) Lwt_io.stdout
+                        let%lwt () =
+                          Lwt_io.fprintl !head_props "INT_JOB_OUTPUT"
+                        in
+                        let%lwt () =
+                          print_matrix (IntMatrix work) Lwt_io.stdout
+                        in
+                        print_matrix (IntMatrix work) !head_props
                       (*!head_props*) else Lwt.return ()
                     in
                     handle_status () (* print to client*)
@@ -276,7 +274,13 @@ let client_handler client_socket_address (client_in, client_out) =
                       (FloatJobType, tbl, FloatMatrix work, counter + 1);
                     let%lwt () =
                       if counter + 1 = Hashtbl.length users then
-                        print_matrix (FloatMatrix work) Lwt_io.stdout
+                        let%lwt () =
+                          Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT"
+                        in
+                        let%lwt () =
+                          print_matrix (FloatMatrix work) Lwt_io.stdout
+                        in
+                        print_matrix (FloatMatrix work) !head_props
                       (*!head_props *) else Lwt.return ()
                     in
                     handle_status () (*print to client *)

@@ -219,7 +219,7 @@ let client_loop server_in server_out =
   let rec send_job () =
     match%lwt Lwt_io.read_line_opt Lwt_io.stdin with
     | Some job ->
-        let%lwt () = Lwt_io.printlf "Attempting to sending job: %s" job in
+        let%lwt () = Lwt_io.printlf "Attempting to send job: %s" job in
         let%lwt () =
           try process_job server_out job
           with InvalidMatrixArgument x ->

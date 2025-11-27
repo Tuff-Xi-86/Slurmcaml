@@ -55,6 +55,7 @@ let return_matrix valuetype op channel =
           Lwt.return (IntMatrix (IntegerMatrixOperations.transpose mat))
       | _ -> failwith "not an implemented function")
   | "float" -> (
+      let%lwt () = Lwt_io.printl "received float job" in
       match op with
       | "add" ->
           let%lwt mat1 = read_float_matrix_input server_in in
