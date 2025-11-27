@@ -4,6 +4,11 @@ type result =
   | IntMatrix of int array array
   | FloatMatrix of float array array
 
+let construct_int_matrix row col = IntMatrix (Array.make row (Array.make col 0))
+
+let construct_float_matrix row col =
+  FloatMatrix (Array.make row (Array.make col 0.0))
+
 (*prints a matrix, type checking against IntMatrix and FloatMatrix*)
 let print_matrix res channel =
   match res with

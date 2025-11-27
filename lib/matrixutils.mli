@@ -5,3 +5,5 @@ type result =
 val print_matrix : result -> Lwt_io.output_channel -> unit Lwt.t
 val read_int_matrix_input : Lwt_io.input_channel -> int array array Lwt.t
 val read_float_matrix_input : Lwt_io.input_channel -> float array array Lwt.t
+val construct_int_matrix : int -> int -> result
+val construct_float_matrix : int -> int -> result
