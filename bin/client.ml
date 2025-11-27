@@ -25,7 +25,8 @@ let read_float_matrix_from_file pathname =
     [matrix_type] ("int" or "float"), and sends the operation metadata and
     matrix data to [out_channel]. Used for unary operations like "transpose" or
     "scale". *)
-let send_one_matrix matrix_type matrix_opp matrix_path out_channel =
+let send_one_matrix matrix_type matrix_opp optional_scale matrix_path
+    out_channel =
   let matrix_list_rep =
     match matrix_type with
     | "int" -> read_int_matrix_from_file matrix_path
@@ -35,9 +36,15 @@ let send_one_matrix matrix_type matrix_opp matrix_path out_channel =
           "Precondition type error in send_one_matrix, this should be \
            impossibles"
   in
+  let%lwt () = Lwt_io.fprintl out_channel "job" in
   let%lwt () = Lwt_io.fprintl out_channel matrix_type in
   let%lwt () = Lwt_io.fprintl out_channel matrix_opp in
-  print_matrix matrix_list_rep out_channel
+  match optional_scale with
+  | None -> print_matrix matrix_list_rep out_channel
+  (*Type of scaler matchs that of matrix type*)
+  | Some scaler ->
+      let%lwt () = Lwt_io.fprintl out_channel scaler in
+      print_matrix matrix_list_rep out_channel
 
 (** [send_two_matrix matrix_type matrix_opp matrix_path_one matrix_path_two
      out_channel] Reads two CSV files from [matrix_path_one] and
@@ -154,9 +161,39 @@ let process_job out_channel job =
                ("File path " ^ file_path
               ^ " does not exist or is not a .csv file"))
   in
-  if matrix_opp = "scale" || matrix_opp = "transpose" then
+  if matrix_opp = "transpose" then
     let%lwt () = Lwt_io.printlf "Sending job: %s" job in
-    send_one_matrix matrix_type matrix_opp first_matrix_path out_channel
+    send_one_matrix matrix_type matrix_opp None first_matrix_path out_channel
+  else if matrix_opp = "scale" then
+    let scale_opt =
+      match split_first_space !rest_string with
+      | "", x ->
+          raise (InvalidMatrixArgument "Missing argument for matrix scalar")
+      | num, x -> num
+    in
+    (*We are going to need to check if its a float or int for now its NA*)
+    if matrix_type = "int" then
+      let () =
+        try ignore (int_of_string scale_opt)
+        with _ ->
+          raise
+            (InvalidMatrixArgument
+               "Matrix scaler must be an int / match that of your matrix type")
+      in
+      let%lwt () = Lwt_io.printlf "Sending job: %s" job in
+      send_one_matrix matrix_type matrix_opp (Some scale_opt) first_matrix_path
+        out_channel
+    else
+      let () =
+        try ignore (float_of_string scale_opt)
+        with _ ->
+          raise
+            (InvalidMatrixArgument
+               "Matrix scaler must be an float / match that of your matrix type")
+      in
+      let%lwt () = Lwt_io.printlf "Sending job: %s" job in
+      send_one_matrix matrix_type matrix_opp (Some scale_opt) first_matrix_path
+        out_channel
   else
     let second_matrix_path =
       match split_first_space !rest_string with
@@ -189,7 +226,7 @@ let client_loop server_in server_out =
             let%lwt () = Lwt_io.printl ("Job Failed: " ^ x) in
             let%lwt () =
               Lwt_io.printl
-                "Usage: <int, float> Matrix_Opperation Matrix_CSV_Path_One \
+                "Usage: <int, float> Matrix_Operation Matrix_CSV_Path_One \
                  Optional_Matrix_CSV_Path_One"
             in
             Lwt.return_unit
@@ -202,28 +239,32 @@ let client_loop server_in server_out =
   let rec receive_responses () =
     let%lwt response_opt = Lwt_io.read_line_opt server_in in
     match response_opt with
-    | Some response ->
-        if response = "END_OF_JOBS" then
-          let%lwt () = Lwt_io.printlf "End of job list." in
-          receive_responses ()
-        else
-          let%lwt () = Lwt_io.printlf "Job Status: \n %s" response in
-          receive_responses ()
+    | Some "INT_JOB_OUTPUT" ->
+        let%lwt () = Lwt_io.printlf "int job output got" in
+        let%lwt matrix = read_int_matrix_input server_in in
+        let int_mat_res = IntMatrix matrix in
+        let%lwt () = Lwt_io.printlf "Received Result Matrix: " in
+        let%lwt () = print_matrix int_mat_res Lwt_io.stdout in
+        receive_responses ()
+    | Some "FLOAT_JOB_OUTPUT" ->
+        let%lwt () = Lwt_io.printlf "float job output got" in
+        let%lwt matrix = read_float_matrix_input server_in in
+        let float_mat_res = FloatMatrix matrix in
+        let%lwt () = Lwt_io.printlf "Received Result Matrix: " in
+        let%lwt () = print_matrix float_mat_res Lwt_io.stdout in
+        receive_responses ()
+    | Some "END_OF_JOBS" ->
+        let%lwt () = Lwt_io.printlf "End of job list." in
+        receive_responses ()
+    | Some other ->
+        let%lwt () = Lwt_io.printlf "Job Status: \n %s" other in
+        receive_responses ()
     | None ->
         print_endline "Server Closed";
         Lwt.return_unit
   in
 
   Lwt.choose [ send_job (); receive_responses () ]
-
-(* job should be a string with first the type of the matrix, which tells you
-   which read function to use. then, it should have the operation to perform,
-   which tells you whether you should only read one matrix (transpose, scale),
-   or 2 matrices for anything else. then, it should give the file path(s). this
-   should print to the outchannel first the type of the matrix, then the
-   operation to perform, then the matrix using [print_matrix] from matrix utils,
-   then the word "done", then the second matrix if the operation requires, also
-   using [print_matrix], then the word done*)
 
 (** int add path1 path2 -> int add *)
 
