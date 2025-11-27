@@ -57,11 +57,10 @@ let tests =
              (fun () -> IntegerMatrixOperations.add array1 array2) );
          ( "testing addition of matrixes when the number or rows are different"
          >:: fun _ ->
-           assert_equal
-             (let array1 = [| [| 1 |]; [| 1 |] |] in
-              let array2 = [| [||] |] in
-              IntegerMatrixOperations.add array1 array2)
-             [| [||] |] );
+           let array1 = [| [| 1 |]; [| 1 |] |] in
+           let array2 = [| [||] |] in
+           assert_raises (Invalid_argument "Matrix sizes do not match")
+             (fun () -> IntegerMatrixOperations.add array1 array2) );
          ( "testing addition of matrixes when there are multiple rows"
          >:: fun _ ->
            let array1 = [| [| 1 |]; [| 1 |]; [| 1 |]; [| 1 |] |] in
@@ -125,11 +124,10 @@ let tests =
          ( "testing addition of float matrixes when the number or rows are \
             different"
          >:: fun _ ->
-           assert_equal
-             (let array1 = [| [| 1. |]; [| 1. |] |] in
-              let array2 = [| [||] |] in
-              FloatMatrixOperations.add array1 array2)
-             [| [||] |] );
+           let array1 = [| [| 1. |]; [| 1. |] |] in
+           let array2 = [| [||] |] in
+           assert_raises (Invalid_argument "Matrix sizes do not match")
+             (fun () -> FloatMatrixOperations.add array1 array2) );
          ( "testing addition of float matrixes when there are multiple rows"
          >:: fun _ ->
            let array1 = [| [| 1. |]; [| 1. |]; [| 1. |]; [| 1. |] |] in
@@ -192,11 +190,10 @@ let tests =
          ( "testing subtraction of matrixes when the number or rows are \
             different"
          >:: fun _ ->
-           assert_equal
-             (let array1 = [| [| 1 |]; [| 1 |] |] in
-              let array2 = [| [||] |] in
-              IntegerMatrixOperations.subtract array1 array2)
-             [| [||] |] );
+           let array1 = [| [| 1 |]; [| 1 |] |] in
+           let array2 = [| [||] |] in
+           assert_raises (Invalid_argument "Matrix sizes do not match")
+             (fun () -> IntegerMatrixOperations.subtract array1 array2) );
          ( "testing subtraction of matrixes when there are multiple rows"
          >:: fun _ ->
            let array1 = [| [| 1 |]; [| 1 |]; [| 1 |]; [| 1 |] |] in
@@ -261,11 +258,10 @@ let tests =
          ( "testing subtraction of float matrixes when the number or rows are \
             different"
          >:: fun _ ->
-           assert_equal
-             (let array1 = [| [| 1. |]; [| 1. |] |] in
-              let array2 = [| [||] |] in
-              FloatMatrixOperations.subtract array1 array2)
-             [| [||] |] );
+           let array1 = [| [| 1. |]; [| 1. |] |] in
+           let array2 = [| [||] |] in
+           assert_raises (Invalid_argument "Matrix sizes do not match")
+             (fun () -> FloatMatrixOperations.subtract array1 array2) );
          ( "testing subtraction of float matrixes when there are multiple rows"
          >:: fun _ ->
            let array1 = [| [| 1. |]; [| 1. |]; [| 1. |]; [| 1. |] |] in
