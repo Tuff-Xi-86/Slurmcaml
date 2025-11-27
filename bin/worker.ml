@@ -107,9 +107,6 @@ let run_client ipaddr port instanceName =
           let%lwt valuetype = Lwt_io.read_line server_in in
           let%lwt op = Lwt_io.read_line server_in in
           let%lwt res = return_matrix valuetype op server_in in
-          let%lwt () =
-            Lwt_io.printlf "Executed command with exit code: [TODO]"
-          in
           let%lwt () = Lwt_io.printlf "Completed job: %s" job in
           (* let%lwt () = Lwt_io.write_line server_out (format_status_string
              "AVAILABLE" job "TODO EXIT CODE") in *)

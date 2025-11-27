@@ -11,6 +11,8 @@ module type MatrixOperations = sig
   val map : (t -> 'a) -> t array array -> 'a array array
 end
 
+exception InvalidDimensions of string
+
 module IntegerMatrixOperations : MatrixOperations with type t = int = struct
   type t = int
 
@@ -26,9 +28,11 @@ module IntegerMatrixOperations : MatrixOperations with type t = int = struct
       exit 1)
     else
       for i = 0 to row1 - 1 do
-        if Array.length a1.(i) <> Array.length a2.(i) then (
-          Printf.printf "Row %d has different length in the two matrices!\n" i;
-          exit 1)
+        if Array.length a1.(i) <> Array.length a2.(i) then
+          raise
+            (InvalidDimensions
+               (Printf.sprintf
+                  "Row %d has different length in the two matrices!\n" i))
       done
 
   (*check if each row have the same length*)
