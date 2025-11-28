@@ -246,6 +246,11 @@ let client_handler client_socket_address (client_in, client_out) =
                 in
                 Hashtbl.remove users key;
                 Lwt.return_unit
+            | Some "Failure" ->
+                let%lwt failure = Lwt_io.read_line client_in in
+                let%lwt () = Lwt_io.fprintl !head_props "Failure" in
+                let%lwt () = Lwt_io.fprintl !head_props failure in
+                handle_status () (*replace*)
             | Some status -> (
                 match !assignment_table with
                 | IntJobType, tbl, IntMatrix work, counter ->

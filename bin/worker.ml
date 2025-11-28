@@ -103,17 +103,22 @@ let run_client ipaddr port instanceName =
           let%lwt () = Lwt_io.printlf "Disconnected from server." in
           Lwt.return_unit
       | Some job ->
-          let%lwt () = Lwt_io.printlf "Received job: %s" job in
-          let%lwt valuetype = Lwt_io.read_line server_in in
-          let%lwt op = Lwt_io.read_line server_in in
-          let%lwt res = return_matrix valuetype op server_in in
-          let%lwt () = Lwt_io.printlf "Completed job: %s" job in
-          (* let%lwt () = Lwt_io.write_line server_out (format_status_string
-             "AVAILABLE" job "TODO EXIT CODE") in *)
-          let%lwt () = Lwt_io.fprintl server_out "result" in
-          let%lwt () = print_matrix res server_out in
-          let%lwt () = print_matrix res Lwt_io.stdout in
-          let%lwt () = Lwt_io.flush server_out in
+          let%lwt () =
+            try%lwt
+              let%lwt () = Lwt_io.printlf "Received job: %s" job in
+              let%lwt valuetype = Lwt_io.read_line server_in in
+              let%lwt op = Lwt_io.read_line server_in in
+              let%lwt res = return_matrix valuetype op server_in in
+              let%lwt () = Lwt_io.printlf "Completed job: %s" job in
+              let%lwt () = Lwt_io.fprintl server_out "result" in
+              let%lwt () = print_matrix res server_out in
+              let%lwt () = print_matrix res Lwt_io.stdout in
+              Lwt_io.flush server_out
+            with Invalid_argument s ->
+              let%lwt () = Lwt_io.fprintl server_out "Failure" in
+              let%lwt () = Lwt_io.fprintl server_out s in
+              Lwt_io.flush server_out
+          in
           handle_job ()
     in
     handle_job ()

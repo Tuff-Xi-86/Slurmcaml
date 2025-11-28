@@ -239,6 +239,11 @@ let client_loop server_in server_out =
   let rec receive_responses () =
     let%lwt response_opt = Lwt_io.read_line_opt server_in in
     match response_opt with
+    | Some "Failure" ->
+        let%lwt failtype = Lwt_io.read_line server_in in
+        let%lwt () = Lwt_io.print "Job failed. Reason: " in
+        let%lwt () = Lwt_io.printl failtype in
+        receive_responses ()
     | Some "INT_JOB_OUTPUT" ->
         let%lwt () = Lwt_io.printlf "int job output got" in
         let%lwt matrix = read_int_matrix_input server_in in
