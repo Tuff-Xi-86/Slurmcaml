@@ -28,8 +28,7 @@ type expr =
 (*TODO: evaluate functions & implement MAP*)
 
 (* reads a matrix from input channel and *)
-let return_matrix valuetype op channel =
-  let server_in = channel in
+let return_matrix valuetype op server_in =
   match valuetype with
   | "int" -> (
       match op with

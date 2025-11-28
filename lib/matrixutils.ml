@@ -1,5 +1,7 @@
 open Functions
 
+exception MatrixNotReadable
+
 type result =
   | IntMatrix of int array array
   | FloatMatrix of float array array
@@ -8,6 +10,28 @@ let construct_int_matrix row col = IntMatrix (Array.make row (Array.make col 0))
 
 let construct_float_matrix row col =
   FloatMatrix (Array.make row (Array.make col 0.0))
+
+(* reads int matrix from a file and returns the matrix, # rows, # columns,
+   valuetype*)
+let read_int_matrix_from_file pathname =
+  try
+    let csv = Csv.load pathname in
+    let arrayrows =
+      List.map (fun x -> Array.of_list (List.map int_of_string x)) csv
+    in
+    IntMatrix (Array.of_list arrayrows)
+  with exn -> raise MatrixNotReadable
+
+(* reads float matrix from a file, returns the matrix, # of rows, # of columsn,
+   valuetype*)
+let read_float_matrix_from_file pathname =
+  try
+    let csv = Csv.load pathname in
+    let arrayrows =
+      List.map (fun x -> Array.of_list (List.map float_of_string x)) csv
+    in
+    FloatMatrix (Array.of_list arrayrows)
+  with exn -> raise MatrixNotReadable
 
 (*prints a matrix, type checking against IntMatrix and FloatMatrix*)
 let print_matrix res channel =
