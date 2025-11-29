@@ -4,17 +4,8 @@ let users = Hashtbl.create 10
 let head_props = ref Lwt_io.stdout
 let jobs = Queue.create ()
 
-(* ignoring this for now*)
-let job_table = Hashtbl.create 10
-
-type currentJobType =
-  | IntJobASMType
-  | FloatJobASMType
-  | IntJobSType
-  | FloatJobSType
-
 (* this is tracking the job type, the worker assignments, the result matrix, and
-   the number of workers who have finished their work*)
+   the number of workers who have finished their work *)
 let assignment_table =
   ref (IntJobASMType, Hashtbl.create 10, IntMatrix [| [| 0 |] |], 0)
 
@@ -22,98 +13,6 @@ let sock_addr_to_string (add : Unix.sockaddr) =
   match add with
   | ADDR_INET (a, port) -> Unix.string_of_inet_addr a ^ ":" ^ string_of_int port
   | _ -> failwith "unsupported"
-
-let find_available_worker () =
-  Hashtbl.fold
-    (fun key (username, in_, out_, available) acc ->
-      if available then Some (key, username, in_, out_) else acc)
-    users None
-
-let parse_status_string status_string =
-  match String.split_on_char '|' status_string with
-  | status :: job :: output_parts ->
-      let output = String.concat "|" output_parts in
-      Some (status, job, output)
-  | _ -> None
-
-type int_job_asm = {
-  aint : int array array;
-  bint : int array array;
-  opi : string;
-}
-
-type float_job_asm = {
-  afloat : float array array;
-  bfloat : float array array;
-  opf : string;
-}
-
-type int_job_s = {
-  aint : int array array;
-  scalar : int;
-}
-
-type float_job_s = {
-  afloat : float array array;
-  scalar : float;
-}
-
-type job =
-  | IntJobASM of int_job_asm
-  | FloatJobASM of float_job_asm
-  | IntJobS of int_job_s
-  | FloatJobS of float_job_s
-
-let process_job in_channel =
-  let%lwt valuetype = Lwt_io.read_line in_channel in
-  let%lwt op = Lwt_io.read_line in_channel in
-  match valuetype with
-  | "int" -> (
-      match op with
-      | "add" | "subtract" | "multiply" ->
-          let%lwt mat1 = read_int_matrix_input in_channel in
-          let%lwt () = Lwt_io.printf "mat1: %d rows\n%!" (Array.length mat1) in
-          let%lwt mat2 = read_int_matrix_input in_channel in
-          let%lwt () = Lwt_io.printf "mat2: %d rows\n%!" (Array.length mat2) in
-          Lwt.return (IntJobASM { aint = mat1; bint = mat2; opi = op })
-      | "scale" ->
-          let%lwt scalar =
-            Lwt.map int_of_string (Lwt_io.read_line in_channel)
-          in
-          let%lwt mat = read_int_matrix_input in_channel in
-          let%lwt () = Lwt_io.printf "mat1: %d rows\n%!" (Array.length mat) in
-          Lwt.return (IntJobS { aint = mat; scalar })
-      | _ -> failwith "TODO Transpose")
-  | "float" -> (
-      match op with
-      | "add" | "subtract" | "multiply" ->
-          let%lwt mat1 = read_float_matrix_input in_channel in
-          let%lwt mat2 = read_float_matrix_input in_channel in
-          Lwt.return (FloatJobASM { afloat = mat1; bfloat = mat2; opf = op })
-      | "scale" ->
-          let%lwt scalar =
-            Lwt.map float_of_string (Lwt_io.read_line in_channel)
-          in
-          let%lwt mat = read_float_matrix_input in_channel in
-          let%lwt () = Lwt_io.printf "mat1: %d rows\n%!" (Array.length mat) in
-          Lwt.return (FloatJobS { afloat = mat; scalar })
-      | _ -> failwith "TODO Transpose")
-  | _ -> failwith "not a supported type"
-
-type split =
-  | IntJobASMSplit of int_job_asm array
-  | FloatJobASMSplit of float_job_asm array
-  | IntJobSSplit of int_job_s array
-  | FloatJobSSplit of float_job_s array
-
-let split_matrix mat num =
-  let n = Array.length mat in
-  let base = n / num in
-  let extra = n mod num in
-  Array.init num (fun i ->
-      let size = base + if i < extra then 1 else 0 in
-      let start = (i * base) + min i extra in
-      Array.sub mat start size)
 
 let determine_assignments job =
   match job with
@@ -193,46 +92,6 @@ let determine_assignments job =
 (*Portion is tuple, first row - last row(Non inclusive), Res is result. Need
   function that fills in matrix given the result matrix and portion, Updates
   assignment_table*)
-let fill_matrix_int (res : int array array) ((first_row, last_row) : 'a * 'b)
-    (old_array : int array array) =
-  Array.iteri
-    (fun num_row matrix_row -> old_array.(num_row + first_row) <- matrix_row)
-    res
-
-let fill_matrix_float (res : float array array)
-    ((first_row, last_row) : 'a * 'b) (old_array : float array array) =
-  Array.iteri
-    (fun num_row matrix_row -> old_array.(num_row + first_row) <- matrix_row)
-    res
-
-let split_int_job_asm numworkers job =
-  let { aint; bint; opi } = job in
-  let a_chunks = split_matrix aint numworkers in
-  let b_chunks = split_matrix bint numworkers in
-  IntJobASMSplit
-    (Array.init numworkers (fun i ->
-         { aint = a_chunks.(i); bint = b_chunks.(i); opi }))
-
-let split_float_job_asm numworkers job =
-  let { afloat; bfloat; opf } = job in
-  let a_chunks = split_matrix afloat numworkers in
-  let b_chunks = split_matrix bfloat numworkers in
-  FloatJobASMSplit
-    (Array.init numworkers (fun i ->
-         { afloat = a_chunks.(i); bfloat = b_chunks.(i); opf }))
-
-let split_int_job_s numworkers (job : int_job_s) =
-  let { aint; scalar } = job in
-  let a_chunks = split_matrix aint numworkers in
-  IntJobSSplit
-    (Array.init numworkers (fun i -> { aint = a_chunks.(i); scalar }))
-
-let split_float_job_s numworkers (job : float_job_s) =
-  let { afloat; scalar } = job in
-  let a_chunks = split_matrix afloat numworkers in
-  FloatJobSSplit
-    (Array.init numworkers (fun i -> { afloat = a_chunks.(i); scalar }))
-
 let dispatch_job split =
   let workers = List.of_seq (Hashtbl.to_seq users) in
   match split with
@@ -282,6 +141,42 @@ let dispatch_job split =
           let%lwt () = Lwt_io.fprintlf client_out "%f" chunk.scalar in
           print_matrix (FloatMatrix chunk.afloat) client_out)
         work_pairs
+
+let process_job in_channel =
+  let%lwt valuetype = Lwt_io.read_line in_channel in
+  let%lwt op = Lwt_io.read_line in_channel in
+  match valuetype with
+  | "int" -> (
+      match op with
+      | "add" | "subtract" | "multiply" ->
+          let%lwt mat1 = read_int_matrix_input in_channel in
+          let%lwt () = Lwt_io.printf "mat1: %d rows\n%!" (Array.length mat1) in
+          let%lwt mat2 = read_int_matrix_input in_channel in
+          let%lwt () = Lwt_io.printf "mat2: %d rows\n%!" (Array.length mat2) in
+          Lwt.return (IntJobASM { aint = mat1; bint = mat2; opi = op })
+      | "scale" ->
+          let%lwt scalar =
+            Lwt.map int_of_string (Lwt_io.read_line in_channel)
+          in
+          let%lwt mat = read_int_matrix_input in_channel in
+          let%lwt () = Lwt_io.printf "mat1: %d rows\n%!" (Array.length mat) in
+          Lwt.return (IntJobS { aint = mat; scalar })
+      | _ -> failwith "TODO Transpose")
+  | "float" -> (
+      match op with
+      | "add" | "subtract" | "multiply" ->
+          let%lwt mat1 = read_float_matrix_input in_channel in
+          let%lwt mat2 = read_float_matrix_input in_channel in
+          Lwt.return (FloatJobASM { afloat = mat1; bfloat = mat2; opf = op })
+      | "scale" ->
+          let%lwt scalar =
+            Lwt.map float_of_string (Lwt_io.read_line in_channel)
+          in
+          let%lwt mat = read_float_matrix_input in_channel in
+          let%lwt () = Lwt_io.printf "mat1: %d rows\n%!" (Array.length mat) in
+          Lwt.return (FloatJobS { afloat = mat; scalar })
+      | _ -> failwith "TODO Transpose")
+  | _ -> failwith "not a supported type"
 
 let rec handle_jobs_from_client client_in client_out key =
   let%lwt job_opt = Lwt_io.read_line_opt client_in in
@@ -539,3 +434,13 @@ let%lwt status = Lwt_io.read_line_opt client_in in
                     handle_status ()
                 | _ -> handle_status ()) 
 )*)
+
+(* let find_available_worker () = Hashtbl.fold (fun key (username, in_, out_,
+   available) acc -> if available then Some (key, username, in_, out_) else acc)
+   users None *)
+(* ignoring this for now*)
+(* let job_table = Hashtbl.create 10 *)
+
+(* let parse_status_string status_string = match String.split_on_char '|'
+   status_string with | status :: job :: output_parts -> let output =
+   String.concat "|" output_parts in Some (status, job, output) | _ -> None *)

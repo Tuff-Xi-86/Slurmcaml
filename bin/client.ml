@@ -59,17 +59,6 @@ let send_two_matrix matrix_type matrix_op matrix_path_one matrix_path_two
   let%lwt () = print_matrix matrix_one_list_rep out_channel in
   print_matrix matrix_two_list_rep out_channel
 
-(** [split_first_space s] Locates the first space in string [s] and splits the
-    string into a tuple: (word_before_space, rest_of_string). If no space is
-    found, returns (s, ""). *)
-let split_first_space s =
-  match String.index_opt s ' ' with
-  | Some i ->
-      let first = String.sub s 0 i in
-      let rest = String.sub s (i + 1) (String.length s - i - 1) in
-      (first, rest)
-  | None -> (s, "")
-
 (** [process_job out_channel job] Parses a raw job string (e.g., "int add
     mat1.csv mat2.csv"), validates that the specified files exist and are .csv
     files, and dispatches the task to either [send_one_matrix] or
@@ -193,7 +182,7 @@ let client_loop server_in server_out =
               let%lwt () =
                 Lwt_io.printl
                   "Usage: <int, float> Matrix_Operation Matrix_CSV_Path_One \
-                   Optional_Matrix_CSV_Path_One"
+                   Optional_Matrix_CSV_Path_Two"
               in
               Lwt.return_unit
           | MatrixNotReadable ->

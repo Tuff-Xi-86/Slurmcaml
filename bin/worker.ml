@@ -13,18 +13,6 @@ let sock_addr_to_string (add : Unix.sockaddr) =
 let format_status_string status job output =
   Printf.sprintf "%s|%s|%s" status job output
 
-(*Map util functions [SHOULD GO IN A LIB ML FILE]*)
-type expr =
-  | Const of float
-  | Var of string
-  | Add of expr * expr
-  | Sub of expr * expr
-  | Mul of expr * expr
-  | Div of expr * expr
-  | Pow of expr * expr
-  | Neg of expr
-  | Func of string * expr
-
 (*TODO: evaluate functions & implement MAP*)
 
 (* reads a matrix from input channel and *)
