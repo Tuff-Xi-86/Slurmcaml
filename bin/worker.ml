@@ -118,21 +118,19 @@ let _ =
   in
   if Array.length Sys.argv < 4 then print_usage ()
   else
-    let ipaddr = Sys.argv.(2) in
+    let ipaddr = Sys.argv.(1) in
     let port =
-      match int_of_string_opt Sys.argv.(3) with
+      match int_of_string_opt Sys.argv.(2) with
       | Some p -> p
       | None ->
-          Printf.printf "Invalid port number: %s\n" Sys.argv.(3);
+          Printf.printf "Invalid port number: %s\n" Sys.argv.(2);
           exit 1
     in
 
     print_endline ("Using IP: " ^ ipaddr ^ " Port: " ^ string_of_int port);
-    match Sys.argv.(1) with
-    | "worker" ->
-        if Array.length Sys.argv < 5 then print_usage ()
-        else
-          let instanceName = Sys.argv.(4) in
-          print_endline ("Worker Name: " ^ instanceName);
-          run_client ipaddr port instanceName
-    | _ -> failwith "wrong usage"
+
+    if Array.length Sys.argv < 4 then print_usage ()
+    else
+      let instanceName = Sys.argv.(3) in
+      print_endline ("Worker Name: " ^ instanceName);
+      run_client ipaddr port instanceName

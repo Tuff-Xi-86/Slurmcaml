@@ -2,6 +2,9 @@ open Slurmcaml.Matrixutils
 
 exception InvalidMatrixArgument of string
 
+let start_time = ref (Unix.gettimeofday ())
+let end_time = ref (Unix.gettimeofday ())
+
 (** [send_one_matrix matrix_type matrix_op matrix_path out_channel] Reads a
     single CSV file from [matrix_path], converts it to the specified
     [matrix_type] ("int" or "float"), and sends the operation metadata and
@@ -194,6 +197,7 @@ let client_loop server_in server_out =
               Lwt.return_unit
         in
         let%lwt () = Lwt_io.flush server_out in
+        start_time := Unix.gettimeofday ();
         send_job ()
     | None -> Lwt_io.printl "Input closed (EOF). Stopping sends."
   in
@@ -212,6 +216,10 @@ let client_loop server_in server_out =
         let int_mat_res = IntMatrix matrix in
         let%lwt () = Lwt_io.printlf "Received Result Matrix: " in
         let%lwt () = print_matrix int_mat_res Lwt_io.stdout in
+        end_time := Unix.gettimeofday ();
+        let%lwt () =
+          Lwt_io.printlf "Job Time: %f seconds" (!end_time -. !start_time)
+        in
         receive_responses ()
     | Some "FLOAT_JOB_OUTPUT" ->
         let%lwt () = Lwt_io.printlf "float job output got" in
@@ -219,6 +227,10 @@ let client_loop server_in server_out =
         let float_mat_res = FloatMatrix matrix in
         let%lwt () = Lwt_io.printlf "Received Result Matrix: " in
         let%lwt () = print_matrix float_mat_res Lwt_io.stdout in
+        end_time := Unix.gettimeofday ();
+        let%lwt () =
+          Lwt_io.printlf "Job Time: %f seconds" (!end_time -. !start_time)
+        in
         receive_responses ()
     | Some "END_OF_JOBS" ->
         let%lwt () = Lwt_io.printlf "End of job list." in
