@@ -245,7 +245,7 @@ let client_handler client_socket_address (client_in, client_out) =
             match status with
             | None ->
                 let%lwt () =
-                  Lwt_io.printlf "%s (%s) disconnected." key username
+                  Lwt_io.printlf "%s (%S) disconnected." key username
                 in
                 Hashtbl.remove users key;
                 Lwt.return_unit

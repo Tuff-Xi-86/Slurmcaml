@@ -5,62 +5,45 @@ exception InvalidMatrixArgument of string
 let start_time = ref (Unix.gettimeofday ())
 let end_time = ref (Unix.gettimeofday ())
 
-(** [send_one_matrix matrix_type matrix_op matrix_path out_channel] Reads a
-    single CSV file from [matrix_path], converts it to the specified
-    [matrix_type] ("int" or "float"), and sends the operation metadata and
-    matrix data to [out_channel]. Used for unary operations like "transpose" or
-    "scale". *)
-let send_one_matrix matrix_type matrix_op optional_scale matrix_path out_channel
-    =
-  let matrix_list_rep =
+(** [send_matrix matrix_type matrix_op optional_scale matrix_path_one
+     optional_matrix_two out_channel] Generalized function that handles both
+    unary and binary operations.
+    - Unary ops call: send_matrix t op scale (Some path1) None
+    - Binary ops call: send_matrix t op None (Some path1) (Some path2) *)
+let send_matrix matrix_type matrix_op optional_scale matrix_path_one
+    optional_matrix_two out_channel =
+  (* Read one matrix *)
+  let read_matrix path =
     match matrix_type with
-    | "int" -> read_int_matrix_from_file matrix_path
-    | "float" -> read_float_matrix_from_file matrix_path
-    | _ ->
-        failwith
-          "Precondition type error in send_one_matrix, this should be \
-           impossibles"
+    | "int" -> read_int_matrix_from_file path
+    | "float" -> read_float_matrix_from_file path
+    | _ -> failwith "Invalid matrix_type in send_matrix"
   in
-  let%lwt () = Lwt_io.fprintl out_channel "job" in
-  let%lwt () = Lwt_io.fprintl out_channel matrix_type in
-  let%lwt () = Lwt_io.fprintl out_channel matrix_op in
-  match optional_scale with
-  | None -> print_matrix matrix_list_rep out_channel
-  (*Type of scaler matchs that of matrix type*)
-  | Some scalar ->
-      let%lwt () = Lwt_io.fprintl out_channel scalar in
-      print_matrix matrix_list_rep out_channel
 
-(** [send_two_matrix matrix_type matrix_op matrix_path_one matrix_path_two
-     out_channel] Reads two CSV files from [matrix_path_one] and
-    [matrix_path_two], converts them to the specified [matrix_type], and sends
-    the operation metadata and both matrices to [out_channel]. Used for binary
-    operations like "add", "subtract", or "multiply". *)
-let send_two_matrix matrix_type matrix_op matrix_path_one matrix_path_two
-    out_channel =
-  let matrix_one_list_rep =
-    match matrix_type with
-    | "int" -> read_int_matrix_from_file matrix_path_one
-    | "float" -> read_float_matrix_from_file matrix_path_one
-    | _ ->
-        failwith
-          "Precondition type error in send_two_matrix, this should be \
-           impossible"
-  in
-  let matrix_two_list_rep =
-    match matrix_type with
-    | "int" -> read_int_matrix_from_file matrix_path_two
-    | "float" -> read_float_matrix_from_file matrix_path_two
-    | _ ->
-        failwith
-          "Precondition type error in send_two_matrix, this should be \
-           impossible"
+  let matrix_one = read_matrix matrix_path_one in
+  let matrix_two =
+    match optional_matrix_two with
+    | None -> None
+    | Some p -> Some (read_matrix p)
   in
   let%lwt () = Lwt_io.fprintl out_channel "job" in
   let%lwt () = Lwt_io.fprintl out_channel matrix_type in
   let%lwt () = Lwt_io.fprintl out_channel matrix_op in
-  let%lwt () = print_matrix matrix_one_list_rep out_channel in
-  print_matrix matrix_two_list_rep out_channel
+
+  (* Optional scale input*)
+  let%lwt () =
+    match optional_scale with
+    | None -> Lwt.return_unit
+    | Some scalar -> Lwt_io.fprintl out_channel scalar
+  in
+
+  (* Send first matrix *)
+  let%lwt () = print_matrix matrix_one out_channel in
+
+  (* Send second matrix if it exists *)
+  match matrix_two with
+  | None -> Lwt.return_unit
+  | Some m -> print_matrix m out_channel
 
 (** [process_job out_channel job] Parses a raw job string (e.g., "int add
     mat1.csv mat2.csv"), validates that the specified files exist and are .csv
@@ -121,7 +104,7 @@ let process_job out_channel job =
   in
   if matrix_op = "transpose" then
     let%lwt () = Lwt_io.printlf "Sending job: %s" job in
-    send_one_matrix matrix_type matrix_op None first_matrix_path out_channel
+    send_matrix matrix_type matrix_op None first_matrix_path None out_channel
   else if matrix_op = "scale" then
     let scale_opt =
       match split_first_space !rest_string with
@@ -139,7 +122,7 @@ let process_job out_channel job =
                "Matrix scaler must be an int / match that of your matrix type")
       in
       let%lwt () = Lwt_io.printlf "Sending job: %s" job in
-      send_one_matrix matrix_type matrix_op (Some scale_opt) first_matrix_path
+      send_matrix matrix_type matrix_op (Some scale_opt) first_matrix_path None
         out_channel
     else
       let () =
@@ -150,7 +133,7 @@ let process_job out_channel job =
                "Matrix scaler must be an float / match that of your matrix type")
       in
       let%lwt () = Lwt_io.printlf "Sending job: %s" job in
-      send_one_matrix matrix_type matrix_op (Some scale_opt) first_matrix_path
+      send_matrix matrix_type matrix_op (Some scale_opt) first_matrix_path None
         out_channel
   else
     let second_matrix_path =
@@ -170,8 +153,8 @@ let process_job out_channel job =
                 ^ " does not exist or is not a .csv file"))
     in
     let%lwt () = Lwt_io.printlf "Sending job: %s" job in
-    send_two_matrix matrix_type matrix_op first_matrix_path second_matrix_path
-      out_channel
+    send_matrix matrix_type matrix_op None first_matrix_path
+      (Some second_matrix_path) out_channel
 
 let client_loop server_in server_out =
   let rec send_job () =
@@ -288,3 +271,36 @@ let _ =
     in
     print_endline ("Using IP: " ^ ipaddr ^ " Port: " ^ string_of_int port);
     run_client ipaddr port
+
+(*(** [send_one_matrix matrix_type matrix_op matrix_path out_channel] Reads a
+  single CSV file from [matrix_path], converts it to the specified [matrix_type]
+  ("int" or "float"), and sends the operation metadata and matrix data to
+  [out_channel]. Used for unary operations like "transpose" or "scale". *) let
+  send_one_matrix matrix_type matrix_op optional_scale matrix_path out_channel =
+  let matrix_list_rep = match matrix_type with | "int" ->
+  read_int_matrix_from_file matrix_path | "float" -> read_float_matrix_from_file
+  matrix_path | _ -> failwith "Precondition type error in send_one_matrix, this
+  should be \ impossibles" in let%lwt () = Lwt_io.fprintl out_channel "job" in
+  let%lwt () = Lwt_io.fprintl out_channel matrix_type in let%lwt () =
+  Lwt_io.fprintl out_channel matrix_op in match optional_scale with | None ->
+  print_matrix matrix_list_rep out_channel (*Type of scaler matchs that of
+  matrix type*) | Some scalar -> let%lwt () = Lwt_io.fprintl out_channel scalar
+  in print_matrix matrix_list_rep out_channel
+
+  (** [send_two_matrix matrix_type matrix_op matrix_path_one matrix_path_two
+  out_channel] Reads two CSV files from [matrix_path_one] and [matrix_path_two],
+  converts them to the specified [matrix_type], and sends the operation metadata
+  and both matrices to [out_channel]. Used for binary operations like "add",
+  "subtract", or "multiply". *) let send_two_matrix matrix_type matrix_op
+  matrix_path_one matrix_path_two out_channel = let matrix_one_list_rep = match
+  matrix_type with | "int" -> read_int_matrix_from_file matrix_path_one |
+  "float" -> read_float_matrix_from_file matrix_path_one | _ -> failwith
+  "Precondition type error in send_two_matrix, this should be \ impossible" in
+  let matrix_two_list_rep = match matrix_type with | "int" ->
+  read_int_matrix_from_file matrix_path_two | "float" ->
+  read_float_matrix_from_file matrix_path_two | _ -> failwith "Precondition type
+  error in send_two_matrix, this should be \ impossible" in let%lwt () =
+  Lwt_io.fprintl out_channel "job" in let%lwt () = Lwt_io.fprintl out_channel
+  matrix_type in let%lwt () = Lwt_io.fprintl out_channel matrix_op in let%lwt ()
+  = print_matrix matrix_one_list_rep out_channel in print_matrix
+  matrix_two_list_rep out_channel*)

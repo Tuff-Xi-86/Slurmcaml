@@ -1,2 +1,2 @@
 (library
- (name slurmcaml) (libraries lwt.unix csv) (preprocess (pps lwt_ppx))  (instrumentation (backend bisect_ppx)))
+ (name slurmcaml) (libraries lwt.unix csv) (preprocess (pps lwt_ppx bisect_ppx))  (instrumentation (backend bisect_ppx)))

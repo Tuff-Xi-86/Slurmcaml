@@ -74,11 +74,20 @@ let return_matrix valuetype op server_in =
    that this node should do, along with the parameters above*)
 let run_client ipaddr port instanceName =
   let client () =
-    let%lwt () =
-      Lwt_io.printlf "worker has joined the fleet as %s" instanceName
-    in
+    let%lwt () = Lwt_io.printl "Attempting to connect to Server..." in
     let%lwt server_in, server_out =
-      Lwt_io.open_connection (ADDR_INET (Unix.inet_addr_of_string ipaddr, port))
+      try%lwt
+        Lwt_io.open_connection
+          (ADDR_INET (Unix.inet_addr_of_string ipaddr, port))
+      with exn ->
+        let%lwt () =
+          Lwt_io.printl
+            (Printf.sprintf "Failed to connect to server at %s:%d" ipaddr port)
+        in
+        exit 0
+    in
+    let%lwt () =
+      Lwt_io.printlf "Connected! Worker has joined as %s" instanceName
     in
     let%lwt () = Lwt_io.fprintlf server_out "%s" instanceName in
     let%lwt () = Lwt_io.flush server_out in
@@ -127,10 +136,7 @@ let _ =
           exit 1
     in
 
-    print_endline ("Using IP: " ^ ipaddr ^ " Port: " ^ string_of_int port);
-
     if Array.length Sys.argv < 4 then print_usage ()
     else
       let instanceName = Sys.argv.(3) in
-      print_endline ("Worker Name: " ^ instanceName);
       run_client ipaddr port instanceName
