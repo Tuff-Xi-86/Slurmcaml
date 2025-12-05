@@ -72,7 +72,7 @@ let split_matrix mat num =
   let n = Array.length mat in
   let base = n / num in
   let extra = n mod num in
-  Array.init num (fun i ->
+  Array.init (min n num) (fun i ->
       let size = base + if i < extra then 1 else 0 in
       let start = (i * base) + min i extra in
       Array.sub mat start size)
@@ -89,8 +89,9 @@ let split_int_job_asm numworkers job =
     | _ -> split_matrix bint numworkers
   in
   IntJobASMSplit
-    (Array.init numworkers (fun i ->
-         { aint = a_chunks.(i); bint = b_chunks.(i); opi }))
+    (Array.init
+       (min numworkers (Array.length aint))
+       (fun i -> { aint = a_chunks.(i); bint = b_chunks.(i); opi }))
 
 (** Floating-point equivalent of [split_int_job_asm]. *)
 let split_float_job_asm numworkers job =
@@ -102,22 +103,27 @@ let split_float_job_asm numworkers job =
     | _ -> split_matrix bfloat numworkers
   in
   FloatJobASMSplit
-    (Array.init numworkers (fun i ->
-         { afloat = a_chunks.(i); bfloat = b_chunks.(i); opf }))
+    (Array.init
+       (min numworkers (Array.length afloat))
+       (fun i -> { afloat = a_chunks.(i); bfloat = b_chunks.(i); opf }))
 
 (** Splits an integer scalar job into [numworkers] independent subjobs. *)
 let split_int_job_s numworkers (job : int_job_s) =
   let { aint; scalar } = job in
   let a_chunks = split_matrix aint numworkers in
   IntJobSSplit
-    (Array.init numworkers (fun i -> { aint = a_chunks.(i); scalar }))
+    (Array.init
+       (min numworkers (Array.length aint))
+       (fun i -> { aint = a_chunks.(i); scalar }))
 
 (** Floating-point equivalent of [split_int_job_s]. *)
 let split_float_job_s numworkers (job : float_job_s) =
   let { afloat; scalar } = job in
   let a_chunks = split_matrix afloat numworkers in
   FloatJobSSplit
-    (Array.init numworkers (fun i -> { afloat = a_chunks.(i); scalar }))
+    (Array.init
+       (min numworkers (Array.length afloat))
+       (fun i -> { afloat = a_chunks.(i); scalar }))
 
 (** Creates an empty integer matrix of dimensions [row × col]. *)
 let construct_int_matrix row col = IntMatrix (Array.make row (Array.make col 0))
@@ -314,7 +320,7 @@ let determine_assignments job users =
     | FloatJobS _ -> FloatJobSType
   in
 
-  (jtype, assignments, matrix, 0)
+  (jtype, assignments, matrix, min rows (Hashtbl.length users))
 
 (** Parses the operation name from [rest_string], consuming it and returning one
     of: "add", "subtract", "multiply", "scale", "transpose". Raises an error on

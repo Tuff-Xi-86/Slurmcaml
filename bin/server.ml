@@ -26,10 +26,20 @@ let sock_addr_to_string (add : Unix.sockaddr) =
    function is in the front end because it requires directly producing input and
    output to the workers.*)
 let dispatch_job split =
-  let workers = List.of_seq (Hashtbl.to_seq worker_table) in
+  let determine_workers chunks =
+    if
+      List.length (List.of_seq (Hashtbl.to_seq worker_table))
+      > List.length chunks
+    then
+      List.take (List.length chunks) (List.of_seq (Hashtbl.to_seq worker_table))
+    else List.of_seq (Hashtbl.to_seq worker_table)
+  in
   match split with
   | IntJobASMSplit a ->
       let chunks = Array.to_list a in
+      let workers = determine_workers chunks in
+      let%lwt () = Lwt_io.printl (string_of_int (List.length workers)) in
+      let%lwt () = Lwt_io.printl (string_of_int (List.length chunks)) in
       let work_pairs = List.combine chunks workers in
       Lwt_list.iter_s
         (fun (chunk, (key, (username, client_in, client_out, _))) ->
@@ -41,6 +51,7 @@ let dispatch_job split =
         work_pairs
   | FloatJobASMSplit a ->
       let chunks = Array.to_list a in
+      let workers = determine_workers chunks in
       let work_pairs = List.combine chunks workers in
       Lwt_list.iter_s
         (fun (chunk, (key, (username, client_in, client_out, _))) ->
@@ -52,6 +63,7 @@ let dispatch_job split =
         work_pairs
   | IntJobSSplit a ->
       let chunks = Array.to_list a in
+      let workers = determine_workers chunks in
       let work_pairs = List.combine chunks workers in
       Lwt_list.iter_s
         (fun ((chunk : int_job_s), (key, (username, client_in, client_out, _)))
@@ -64,6 +76,7 @@ let dispatch_job split =
         work_pairs
   | FloatJobSSplit a ->
       let chunks = Array.to_list a in
+      let workers = determine_workers chunks in
       let work_pairs = List.combine chunks workers in
       Lwt_list.iter_s
         (fun ((chunk : float_job_s), (key, (username, client_in, client_out, _)))
@@ -169,9 +182,9 @@ let handle_int_ASM_job tbl work counter client_in key =
   let%lwt res = read_int_matrix_input client_in in
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_int res portion work in
-  assignment_table := (IntJobASMType, tbl, IntMatrix work, counter + 1);
+  assignment_table := (IntJobASMType, tbl, IntMatrix work, counter - 1);
   if not !flag then
-    if counter + 1 = Hashtbl.length worker_table then
+    if counter - 1 = 0 then
       let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
       let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
       print_matrix (IntMatrix work) !head_props
@@ -188,9 +201,9 @@ let handle_float_ASM_job tbl work counter client_in key =
   let%lwt res = read_float_matrix_input client_in in
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_float res portion work in
-  assignment_table := (FloatJobASMType, tbl, FloatMatrix work, counter + 1);
+  assignment_table := (FloatJobASMType, tbl, FloatMatrix work, counter - 1);
   if not !flag then
-    if counter + 1 = Hashtbl.length worker_table then
+    if counter - 1 = 0 then
       let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
       let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
       print_matrix (FloatMatrix work) !head_props
@@ -207,9 +220,9 @@ let handle_int_job_s tbl work counter client_in key =
   let%lwt res = read_int_matrix_input client_in in
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_int res portion work in
-  assignment_table := (IntJobSType, tbl, IntMatrix work, counter + 1);
+  assignment_table := (IntJobSType, tbl, IntMatrix work, counter - 1);
   if not !flag then
-    if counter + 1 = Hashtbl.length worker_table then
+    if counter - 1 = 0 then
       let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
       let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
       print_matrix (IntMatrix work) !head_props
@@ -226,9 +239,9 @@ let handle_float_job_s tbl work counter client_in key =
   let%lwt res = read_float_matrix_input client_in in
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_float res portion work in
-  assignment_table := (FloatJobSType, tbl, FloatMatrix work, counter + 1);
+  assignment_table := (FloatJobSType, tbl, FloatMatrix work, counter - 1);
   if not !flag then
-    if counter + 1 = Hashtbl.length worker_table then
+    if counter - 1 = 0 then
       let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
       let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
       print_matrix (FloatMatrix work) !head_props

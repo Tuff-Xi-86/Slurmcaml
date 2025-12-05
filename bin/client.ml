@@ -115,7 +115,8 @@ let rec receive_responses server_in =
       let int_mat_res = IntMatrix matrix in
       let%lwt () =
         Lwt_io.printlf
-          "Received Result Matrix: (format: # rows, # columns, matrix)"
+          "Received Result Matrix: (format: # rows, # columns, matrix in csv \
+           format)"
       in
       let%lwt () = print_matrix int_mat_res Lwt_io.stdout in
       end_time := Unix.gettimeofday ();
@@ -129,7 +130,8 @@ let rec receive_responses server_in =
       let float_mat_res = FloatMatrix matrix in
       let%lwt () =
         Lwt_io.printlf
-          "Received Result Matrix: (format: # rows, # columns, matrix)"
+          "Received Result Matrix: (format: # rows, # columns, matrix in csv \
+           format)"
       in
       let%lwt () = print_matrix float_mat_res Lwt_io.stdout in
       end_time := Unix.gettimeofday ();
