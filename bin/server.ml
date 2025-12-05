@@ -14,81 +14,6 @@ let sock_addr_to_string (add : Unix.sockaddr) =
   | ADDR_INET (a, port) -> Unix.string_of_inet_addr a ^ ":" ^ string_of_int port
   | _ -> failwith "unsupported"
 
-let determine_assignments job =
-  match job with
-  | IntJobASM { aint; bint; opi } ->
-      let mat = aint in
-      let workers = List.of_seq (Hashtbl.to_seq users) in
-      let num = List.length workers in
-      let n = Array.length mat in
-      let base = n / num in
-      let extra = n mod num in
-      let worker_assignments = Hashtbl.create 10 in
-      List.iteri
-        (fun i (sock, (username, _, _, _)) ->
-          let size = base + if i < extra then 1 else 0 in
-          let start = (i * base) + min i extra in
-          Hashtbl.replace worker_assignments sock (start, start + size))
-        workers;
-      ( IntJobASMType,
-        worker_assignments,
-        construct_int_matrix (Array.length aint) (Array.length aint.(0)),
-        0 )
-  | FloatJobASM { afloat; bfloat; opf } ->
-      let mat = afloat in
-      let workers = List.of_seq (Hashtbl.to_seq users) in
-      let num = List.length workers in
-      let n = Array.length mat in
-      let base = n / num in
-      let extra = n mod num in
-      let worker_assignments = Hashtbl.create 10 in
-      List.iteri
-        (fun i (sock, (username, _, _, _)) ->
-          let size = base + if i < extra then 1 else 0 in
-          let start = (i * base) + min i extra in
-          Hashtbl.replace worker_assignments sock (start, start + size))
-        workers;
-      ( FloatJobASMType,
-        worker_assignments,
-        construct_float_matrix (Array.length afloat) (Array.length afloat.(0)),
-        0 )
-  | IntJobS { aint; scalar } ->
-      let mat = aint in
-      let workers = List.of_seq (Hashtbl.to_seq users) in
-      let num = List.length workers in
-      let n = Array.length mat in
-      let base = n / num in
-      let extra = n mod num in
-      let worker_assignments = Hashtbl.create 10 in
-      List.iteri
-        (fun i (sock, (username, _, _, _)) ->
-          let size = base + if i < extra then 1 else 0 in
-          let start = (i * base) + min i extra in
-          Hashtbl.replace worker_assignments sock (start, start + size))
-        workers;
-      ( IntJobSType,
-        worker_assignments,
-        construct_int_matrix (Array.length aint) (Array.length aint.(0)),
-        0 )
-  | FloatJobS { afloat; scalar } ->
-      let mat = afloat in
-      let workers = List.of_seq (Hashtbl.to_seq users) in
-      let num = List.length workers in
-      let n = Array.length mat in
-      let base = n / num in
-      let extra = n mod num in
-      let worker_assignments = Hashtbl.create 10 in
-      List.iteri
-        (fun i (sock, (username, _, _, _)) ->
-          let size = base + if i < extra then 1 else 0 in
-          let start = (i * base) + min i extra in
-          Hashtbl.replace worker_assignments sock (start, start + size))
-        workers;
-      ( FloatJobSType,
-        worker_assignments,
-        construct_float_matrix (Array.length afloat) (Array.length afloat.(0)),
-        0 )
-
 (*Portion is tuple, first row - last row(Non inclusive), Res is result. Need
   function that fills in matrix given the result matrix and portion, Updates
   assignment_table*)
@@ -194,11 +119,11 @@ let rec handle_jobs_from_client client_in client_out key =
         in
         let%lwt () =
           Lwt_io.fprintl client_out
-            "There are no worker nodes available, please try again  later"
+            "There are no worker nodes available, please try again later"
         in
         handle_jobs_from_client client_in client_out key
       else
-        let () = assignment_table := determine_assignments job in
+        let () = assignment_table := determine_assignments job users in
         let split =
           match job with
           | IntJobASM i -> split_int_job_asm (Hashtbl.length users) i
@@ -214,6 +139,91 @@ let rec handle_jobs_from_client client_in client_out key =
         Lwt_io.printlf "ERROR: '%s' is not a valid command" command
       in
       handle_jobs_from_client client_in client_out key
+
+let handle_int_ASM_job tbl work counter client_in key =
+  let%lwt res = read_int_matrix_input client_in in
+  let portion = Hashtbl.find tbl key in
+  let () = fill_matrix_int res portion work in
+  assignment_table := (IntJobASMType, tbl, IntMatrix work, counter + 1);
+  if counter + 1 = Hashtbl.length users then
+    let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
+    let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
+    print_matrix (IntMatrix work) !head_props
+  else Lwt.return ()
+
+let handle_float_ASM_job tbl work counter client_in key =
+  let%lwt res = read_float_matrix_input client_in in
+  let portion = Hashtbl.find tbl key in
+  let () = fill_matrix_float res portion work in
+  assignment_table := (FloatJobASMType, tbl, FloatMatrix work, counter + 1);
+  if counter + 1 = Hashtbl.length users then
+    let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
+    let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
+    print_matrix (FloatMatrix work) !head_props
+  else Lwt.return ()
+
+let handle_int_job_s tbl work counter client_in key =
+  let%lwt res = read_int_matrix_input client_in in
+  let portion = Hashtbl.find tbl key in
+  let () = fill_matrix_int res portion work in
+  assignment_table := (IntJobSType, tbl, IntMatrix work, counter + 1);
+  if counter + 1 = Hashtbl.length users then
+    let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
+    let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
+    print_matrix (IntMatrix work) !head_props
+  else Lwt.return ()
+
+let handle_float_job_s tbl work counter client_in key =
+  let%lwt res = read_float_matrix_input client_in in
+  let portion = Hashtbl.find tbl key in
+  let () = fill_matrix_float res portion work in
+  assignment_table := (FloatJobSType, tbl, FloatMatrix work, counter + 1);
+  if counter + 1 = Hashtbl.length users then
+    let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
+    let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
+    print_matrix (FloatMatrix work) !head_props
+  else Lwt.return ()
+
+let handle_failure client_in =
+  let%lwt failure = Lwt_io.read_line client_in in
+  let%lwt () = Lwt_io.fprintl !head_props "Failure" in
+  Lwt_io.fprintl !head_props failure
+
+let handle_none key username =
+  let%lwt () = Lwt_io.printlf "%s (%S) disconnected." key username in
+  Lwt.return_unit
+
+let handle_worker_connection instanceName key client_in client_out =
+  let username = instanceName in
+  let%lwt () =
+    Hashtbl.replace users key (username, client_in, client_out, true);
+    Lwt.return_unit
+  in
+  let%lwt () = Lwt_io.printlf "%s (%S) connected." key username in
+  let rec handle_status () =
+    let%lwt status = Lwt_io.read_line_opt client_in in
+    match status with
+    | None -> handle_none key username
+    | Some "Failure" ->
+        let%lwt () = handle_failure client_in in
+        handle_status ()
+    | Some status -> (
+        match !assignment_table with
+        | IntJobASMType, tbl, IntMatrix work, counter ->
+            let%lwt () = handle_int_ASM_job tbl work counter client_in key in
+            handle_status ()
+        | FloatJobASMType, tbl, FloatMatrix work, counter ->
+            let%lwt () = handle_float_ASM_job tbl work counter client_in key in
+            handle_status ()
+        | IntJobSType, tbl, IntMatrix work, counter ->
+            let%lwt () = handle_int_job_s tbl work counter client_in key in
+            handle_status ()
+        | FloatJobSType, tbl, FloatMatrix work, counter ->
+            let%lwt () = handle_float_job_s tbl work counter client_in key in
+            handle_status ()
+        | _ -> Lwt.fail_with "this should not happen :(")
+  in
+  handle_status ()
 
 let client_handler client_socket_address (client_in, client_out) =
   let key = sock_addr_to_string client_socket_address in
@@ -234,104 +244,7 @@ let client_handler client_socket_address (client_in, client_out) =
           in
           handle_jobs_from_client client_in client_out key
       | instanceName ->
-          let username = instanceName in
-          let%lwt () =
-            Hashtbl.replace users key (username, client_in, client_out, true);
-            Lwt.return_unit
-          in
-          let%lwt () = Lwt_io.printlf "%s (%S) connected." key username in
-          let rec handle_status () =
-            let%lwt status = Lwt_io.read_line_opt client_in in
-            match status with
-            | None ->
-                let%lwt () =
-                  Lwt_io.printlf "%s (%S) disconnected." key username
-                in
-                Hashtbl.remove users key;
-                Lwt.return_unit
-            | Some "Failure" ->
-                let%lwt failure = Lwt_io.read_line client_in in
-                let%lwt () = Lwt_io.fprintl !head_props "Failure" in
-                let%lwt () = Lwt_io.fprintl !head_props failure in
-                handle_status () (*replace*)
-            | Some status -> (
-                match !assignment_table with
-                | IntJobASMType, tbl, IntMatrix work, counter ->
-                    let%lwt res = read_int_matrix_input client_in in
-                    let portion = Hashtbl.find tbl key in
-                    let () = fill_matrix_int res portion work in
-                    assignment_table :=
-                      (IntJobASMType, tbl, IntMatrix work, counter + 1);
-                    let%lwt () =
-                      if counter + 1 = Hashtbl.length users then
-                        let%lwt () =
-                          Lwt_io.fprintl !head_props "INT_JOB_OUTPUT"
-                        in
-                        let%lwt () =
-                          print_matrix (IntMatrix work) Lwt_io.stdout
-                        in
-                        print_matrix (IntMatrix work) !head_props
-                      (*!head_props*) else Lwt.return ()
-                    in
-                    handle_status () (* print to client*)
-                | FloatJobASMType, tbl, FloatMatrix work, counter ->
-                    let%lwt res = read_float_matrix_input client_in in
-                    let portion = Hashtbl.find tbl key in
-                    let () = fill_matrix_float res portion work in
-                    assignment_table :=
-                      (FloatJobASMType, tbl, FloatMatrix work, counter + 1);
-                    let%lwt () =
-                      if counter + 1 = Hashtbl.length users then
-                        let%lwt () =
-                          Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT"
-                        in
-                        let%lwt () =
-                          print_matrix (FloatMatrix work) Lwt_io.stdout
-                        in
-                        print_matrix (FloatMatrix work) !head_props
-                      (*!head_props *) else Lwt.return ()
-                    in
-                    handle_status ()
-                    (*print to client *)
-                | IntJobSType, tbl, IntMatrix work, counter ->
-                    let%lwt res = read_int_matrix_input client_in in
-                    let portion = Hashtbl.find tbl key in
-                    let () = fill_matrix_int res portion work in
-                    assignment_table :=
-                      (IntJobSType, tbl, IntMatrix work, counter + 1);
-                    let%lwt () =
-                      if counter + 1 = Hashtbl.length users then
-                        let%lwt () =
-                          Lwt_io.fprintl !head_props "INT_JOB_OUTPUT"
-                        in
-                        let%lwt () =
-                          print_matrix (IntMatrix work) Lwt_io.stdout
-                        in
-                        print_matrix (IntMatrix work) !head_props
-                      (*!head_props*) else Lwt.return ()
-                    in
-                    handle_status ()
-                | FloatJobSType, tbl, FloatMatrix work, counter ->
-                    let%lwt res = read_float_matrix_input client_in in
-                    let portion = Hashtbl.find tbl key in
-                    let () = fill_matrix_float res portion work in
-                    assignment_table :=
-                      (FloatJobSType, tbl, FloatMatrix work, counter + 1);
-                    let%lwt () =
-                      if counter + 1 = Hashtbl.length users then
-                        let%lwt () =
-                          Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT"
-                        in
-                        let%lwt () =
-                          print_matrix (FloatMatrix work) Lwt_io.stdout
-                        in
-                        print_matrix (FloatMatrix work) !head_props
-                      (*!head_props*) else Lwt.return ()
-                    in
-                    handle_status ()
-                | _ -> Lwt.fail_with "this should not happen :(")
-          in
-          handle_status ())
+          handle_worker_connection instanceName key client_in client_out)
 
 (*Portion is tuple, first row - last row(Non inclusive), Res is result. Need
   function that fills in matrix given the result matrix and portion*)
@@ -372,75 +285,3 @@ let _ =
     in
     print_endline ("Using IP: " ^ ipaddr ^ " Port: " ^ string_of_int port);
     run_server ipaddr port
-(* | "head" -> if Array.length Sys.argv < 4 then print_usage () else run_head
-   ipaddr port | "worker" -> if Array.length Sys.argv < 5 then print_usage ()
-   else let instanceName = Sys.argv.(4) in print_endline ("Worker Name: " ^
-   instanceName); run_client ipaddr port instanceName | _ -> print_usage () *)
-
-(* | Some "view_jobs" -> let%lwt () = Lwt_io.fprintlf client_out "Current Job
-   Table" in let entries = Hashtbl.fold (fun job (completed, worker, output) acc
-   -> let status_str = if completed then "COMPLETED" else "PENDING" in let
-   worker_str = match worker with | Some w -> w | None -> "N/A" in let
-   output_str = match output with | Some o -> o | None -> "N/A" in
-   Printf.sprintf "Job: %s | Status: %s | Worker: %s | Output: %s" job
-   status_str worker_str output_str :: acc) job_table [] in let%lwt () =
-   Lwt_list.iter_s (fun line -> Lwt_io.fprintlf client_out "%s" line) (List.rev
-   entries) in let%lwt () = Lwt_io.fprintlf client_out "END_OF_JOBS" in
-   handle_jobs ()*)
-
-(* let rec send_jobs () = match Queue.is_empty jobs with | true -> let%lwt () =
-   Lwt_unix.sleep 1.0 in send_jobs () | false -> ( match find_available_worker
-   () with | None -> let%lwt () = Lwt_unix.sleep 1.0 in send_jobs () | Some
-   (worker_key, worker_name, worker_in, worker_out) -> let job = Queue.pop jobs
-   in let%lwt () = Lwt_io.printlf "Assigning job %s to worker %s (%s)" job
-   worker_name worker_key in let%lwt () = Lwt.return (Hashtbl.replace job_table
-   job (false, Some worker_name, None)) in let%lwt () = Lwt_io.write_line
-   worker_out job in let%lwt () = Lwt_io.flush worker_out in Hashtbl.replace
-   users worker_key (worker_name, worker_in, worker_out, false); send_jobs ())
-   in Lwt.choose [ handle_status (); send_jobs () ]) *)
-(* (
-let%lwt status = Lwt_io.read_line_opt client_in in
-            match status with
-            | None ->
-                let%lwt () =
-                  Lwt_io.printlf "%s (%s) disconnected." key username
-                in
-                Hashtbl.remove users key;
-                Lwt.return_unit
-            | Some status -> (
-                let%lwt () =
-                  Lwt_io.printlf "%s (%s): Status Update: %S" key username
-                    status
-                in
-                (*statuses are formatted as follows: <AVAILABLE> <JOB>
-                  <OUTPUT>*)
-                match parse_status_string status with
-                | None ->
-                    let%lwt () =
-                      Lwt_io.printlf "%s (%s): Malformed status string: %s" key
-                        username status
-                    in
-                    handle_status ()
-                | Some ("AVAILABLE", job, output) ->
-                    Hashtbl.replace users key
-                      (username, client_in, client_out, true);
-                    Hashtbl.replace job_table job
-                      (true, Some username, Some output);
-
-                    (* read from worker — last worker will do the compilation
-                       work*)
-
-                    (* start, end, *)
-                    handle_status ()
-                | _ -> handle_status ()) 
-)*)
-
-(* let find_available_worker () = Hashtbl.fold (fun key (username, in_, out_,
-   available) acc -> if available then Some (key, username, in_, out_) else acc)
-   users None *)
-(* ignoring this for now*)
-(* let job_table = Hashtbl.create 10 *)
-
-(* let parse_status_string status_string = match String.split_on_char '|'
-   status_string with | status :: job :: output_parts -> let output =
-   String.concat "|" output_parts in Some (status, job, output) | _ -> None *)

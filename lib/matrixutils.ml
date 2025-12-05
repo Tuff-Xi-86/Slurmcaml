@@ -1,6 +1,7 @@
 open Functions
 
 exception MatrixNotReadable
+exception InvalidMatrixArgument of string
 
 type result =
   | IntMatrix of int array array
@@ -220,3 +221,141 @@ let read_float_matrix_input channel =
   in
   let%lwt () = set_row 0 in
   Lwt.return mat
+
+let determine_assignments job users =
+  match job with
+  | IntJobASM { aint; bint; opi } ->
+      let workers = List.of_seq (Hashtbl.to_seq users) in
+      let num = List.length workers in
+      let n = Array.length aint in
+      let base = n / num in
+      let extra = n mod num in
+      let worker_assignments = Hashtbl.create 10 in
+      List.iteri
+        (fun i (sock, (username, _, _, _)) ->
+          let size = base + if i < extra then 1 else 0 in
+          let start = (i * base) + min i extra in
+          Hashtbl.replace worker_assignments sock (start, start + size))
+        workers;
+      ( IntJobASMType,
+        worker_assignments,
+        construct_int_matrix (Array.length aint) (Array.length aint.(0)),
+        0 )
+  | FloatJobASM { afloat; bfloat; opf } ->
+      let workers = List.of_seq (Hashtbl.to_seq users) in
+      let num = List.length workers in
+      let n = Array.length afloat in
+      let base = n / num in
+      let extra = n mod num in
+      let worker_assignments = Hashtbl.create 10 in
+      List.iteri
+        (fun i (sock, (username, _, _, _)) ->
+          let size = base + if i < extra then 1 else 0 in
+          let start = (i * base) + min i extra in
+          Hashtbl.replace worker_assignments sock (start, start + size))
+        workers;
+      ( FloatJobASMType,
+        worker_assignments,
+        construct_float_matrix (Array.length afloat) (Array.length afloat.(0)),
+        0 )
+  | IntJobS { aint; scalar } ->
+      let workers = List.of_seq (Hashtbl.to_seq users) in
+      let num = List.length workers in
+      let n = Array.length aint in
+      let base = n / num in
+      let extra = n mod num in
+      let worker_assignments = Hashtbl.create 10 in
+      List.iteri
+        (fun i (sock, (username, _, _, _)) ->
+          let size = base + if i < extra then 1 else 0 in
+          let start = (i * base) + min i extra in
+          Hashtbl.replace worker_assignments sock (start, start + size))
+        workers;
+      ( IntJobSType,
+        worker_assignments,
+        construct_int_matrix (Array.length aint) (Array.length aint.(0)),
+        0 )
+  | FloatJobS { afloat; scalar } ->
+      let workers = List.of_seq (Hashtbl.to_seq users) in
+      let num = List.length workers in
+      let n = Array.length afloat in
+      let base = n / num in
+      let extra = n mod num in
+      let worker_assignments = Hashtbl.create 10 in
+      List.iteri
+        (fun i (sock, (username, _, _, _)) ->
+          let size = base + if i < extra then 1 else 0 in
+          let start = (i * base) + min i extra in
+          Hashtbl.replace worker_assignments sock (start, start + size))
+        workers;
+      ( FloatJobSType,
+        worker_assignments,
+        construct_float_matrix (Array.length afloat) (Array.length afloat.(0)),
+        0 )
+
+let process_op rest_string =
+  match split_first_space !rest_string with
+  | "", x ->
+      raise (InvalidMatrixArgument "Missing argument for matrix opperation")
+  | "add", rest ->
+      rest_string := rest;
+      "add"
+  | "subtract", rest ->
+      rest_string := rest;
+      "subtract"
+  | "multiply", rest ->
+      rest_string := rest;
+      "multiply"
+  | "scale", rest ->
+      rest_string := rest;
+      "scale"
+  | "transpose", rest ->
+      rest_string := rest;
+      "transpose"
+  | _ -> raise (InvalidMatrixArgument "unknown matrix operation")
+
+let parse_path rest_string =
+  match split_first_space !rest_string with
+  | "", x -> raise (InvalidMatrixArgument "Missing Path for matrix")
+  | file_path, rest ->
+      if
+        Sys.file_exists file_path
+        && String.lowercase_ascii (Filename.extension file_path) = ".csv"
+      then (
+        rest_string := rest;
+        file_path)
+      else
+        raise
+          (InvalidMatrixArgument
+             ("File path " ^ file_path ^ " does not exist or is not a .csv file"))
+
+let parse_matrix_type rest_string =
+  match split_first_space !rest_string with
+  | "", x -> raise (InvalidMatrixArgument "Missing argument for matrix type")
+  | "int", rest ->
+      rest_string := rest;
+      "int"
+  | "float", rest ->
+      rest_string := rest;
+      "float"
+  | _ ->
+      raise (InvalidMatrixArgument "unknown matrix type: must be int or float")
+
+let parse_scale rest_string =
+  match split_first_space !rest_string with
+  | "", x -> raise (InvalidMatrixArgument "Missing argument for matrix scalar")
+  | num, x -> num
+
+let check_scalar_int scale_opt =
+  try ignore (int_of_string scale_opt)
+  with _ ->
+    raise
+      (InvalidMatrixArgument
+         "Matrix scalar must be an int / match that of your matrix type")
+
+let check_scalar_float scale_opt =
+  try ignore (float_of_string scale_opt)
+  with _ ->
+    raise
+      (InvalidMatrixArgument
+         "Matrix scalar must be an float / match that of your matrix type")

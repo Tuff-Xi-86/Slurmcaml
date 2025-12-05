@@ -62,3 +62,15 @@ val split_int_job_asm : int -> int_job_asm -> split
 val split_float_job_asm : int -> float_job_asm -> split
 val split_int_job_s : int -> int_job_s -> split
 val split_float_job_s : int -> float_job_s -> split
+
+val determine_assignments :
+  job ->
+  ('a, 'b * 'c * 'd * 'e) Hashtbl.t ->
+  currentJobType * ('a, int * int) Hashtbl.t * result * int
+
+val process_op : string ref -> string
+val parse_path : string ref -> string
+val parse_matrix_type : string ref -> string
+val parse_scale : string ref -> string
+val check_scalar_int : string -> unit
+val check_scalar_float : string -> unit
