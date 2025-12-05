@@ -115,7 +115,10 @@ let rec receive_responses server_in =
       let%lwt () = Lwt_io.printlf "int job output got" in
       let%lwt matrix = read_int_matrix_input server_in in
       let int_mat_res = IntMatrix matrix in
-      let%lwt () = Lwt_io.printlf "Received Result Matrix: " in
+      let%lwt () =
+        Lwt_io.printlf
+          "Received Result Matrix: (format: # rows, # columns, matrix)"
+      in
       let%lwt () = print_matrix int_mat_res Lwt_io.stdout in
       end_time := Unix.gettimeofday ();
       let%lwt () =
@@ -126,7 +129,10 @@ let rec receive_responses server_in =
       let%lwt () = Lwt_io.printlf "float job output got" in
       let%lwt matrix = read_float_matrix_input server_in in
       let float_mat_res = FloatMatrix matrix in
-      let%lwt () = Lwt_io.printlf "Received Result Matrix: " in
+      let%lwt () =
+        Lwt_io.printlf
+          "Received Result Matrix: (format: # rows, # columns, matrix)"
+      in
       let%lwt () = print_matrix float_mat_res Lwt_io.stdout in
       end_time := Unix.gettimeofday ();
       let%lwt () =

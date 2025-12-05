@@ -160,7 +160,8 @@ let read_int_matrix_from_file pathname =
     let arrayrows =
       List.map (fun x -> Array.of_list (List.map int_of_string x)) csv
     in
-    IntMatrix (Array.of_list arrayrows)
+    if List.length arrayrows = 0 then raise MatrixNotReadable
+    else IntMatrix (Array.of_list arrayrows)
   with exn -> raise MatrixNotReadable
 
 (** Reads a float CSV file into a floating-point matrix. Raises
@@ -171,7 +172,8 @@ let read_float_matrix_from_file pathname =
     let arrayrows =
       List.map (fun x -> Array.of_list (List.map float_of_string x)) csv
     in
-    FloatMatrix (Array.of_list arrayrows)
+    if List.length arrayrows = 0 then raise MatrixNotReadable
+    else FloatMatrix (Array.of_list arrayrows)
   with exn -> raise MatrixNotReadable
 
 (** Prints a matrix to the provided output channel in the format: row_count
