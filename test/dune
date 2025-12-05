@@ -1,3 +1,10 @@
 (test
- (name test_slurmcaml )
- (libraries ounit2 slurmcaml))
+ (name test_slurmcaml)
+ (libraries ounit2 slurmcaml lwt.unix)
+)
+
+(test
+ (name test_channelOps)
+ (libraries ounit2 slurmcaml lwt.unix)
+ (preprocess (pps lwt_ppx))
+)
