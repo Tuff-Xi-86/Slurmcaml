@@ -277,32 +277,41 @@ let compute_assignments rows users =
     workers;
   assignments
 
-(** [empty_matrix_for_job job] constructs an empty matrix matching the size of
-    the appropriate left-hand matrix of the job. *)
-let empty_matrix_for_job = function
-  | IntJobASM { aint; _ } | IntJobS { aint; _ } ->
-      construct_int_matrix (Array.length aint) (Array.length aint.(0))
-  | FloatJobASM { afloat; _ } | FloatJobS { afloat; _ } ->
-      construct_float_matrix (Array.length afloat) (Array.length afloat.(0))
-
-(** [job_type job] returns the tag describing the job's type. *)
-let job_type = function
-  | IntJobASM _ -> IntJobASMType
-  | FloatJobASM _ -> FloatJobASMType
-  | IntJobS _ -> IntJobSType
-  | FloatJobS _ -> FloatJobSType
-
-(** Computes worker assignments, the job type, an empty output matrix, and the
-    starting worker index (0). *)
 let determine_assignments job users =
+  (* Extract the number of rows from the left-hand matrix of the job. *)
   let rows =
     match job with
-    | IntJobASM { aint; _ } | IntJobS { aint; _ } -> Array.length aint
-    | FloatJobASM { afloat; _ } | FloatJobS { afloat; _ } -> Array.length afloat
+    | IntJobASM { aint; _ } -> Array.length aint
+    | IntJobS { aint; _ } -> Array.length aint
+    | FloatJobASM { afloat; _ } -> Array.length afloat
+    | FloatJobS { afloat; _ } -> Array.length afloat
   in
+
+  (* Compute worker-to-row-range assignments. *)
   let assignments = compute_assignments rows users in
-  let matrix = empty_matrix_for_job job in
-  let jtype = job_type job in
+
+  (* Construct the empty output matrix for this job. *)
+  let matrix =
+    match job with
+    | IntJobASM { aint; _ } ->
+        construct_int_matrix (Array.length aint) (Array.length aint.(0))
+    | IntJobS { aint; _ } ->
+        construct_int_matrix (Array.length aint) (Array.length aint.(0))
+    | FloatJobASM { afloat; _ } ->
+        construct_float_matrix (Array.length afloat) (Array.length afloat.(0))
+    | FloatJobS { afloat; _ } ->
+        construct_float_matrix (Array.length afloat) (Array.length afloat.(0))
+  in
+
+  (* Job type for upper-level dispatch. *)
+  let jtype =
+    match job with
+    | IntJobASM _ -> IntJobASMType
+    | IntJobS _ -> IntJobSType
+    | FloatJobASM _ -> FloatJobASMType
+    | FloatJobS _ -> FloatJobSType
+  in
+
   (jtype, assignments, matrix, 0)
 
 (** Parses the operation name from [rest_string], consuming it and returning one
