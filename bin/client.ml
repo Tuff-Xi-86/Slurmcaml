@@ -9,7 +9,9 @@ let end_time = ref (Unix.gettimeofday ())
      optional_matrix_two out_channel] Generalized function that handles both
     unary and binary operations.
     - Unary ops call: send_matrix t op scale (Some path1) None
-    - Binary ops call: send_matrix t op None (Some path1) (Some path2) *)
+    - Binary ops call: send_matrix t op None (Some path1) (Some path2). This
+      function is in the front end because it requires input and output with Lwt
+      to the server.*)
 let send_matrix matrix_type matrix_op optional_scale matrix_path_one
     optional_matrix_two out_channel =
   let read_matrix path =
@@ -41,16 +43,15 @@ let send_matrix matrix_type matrix_op optional_scale matrix_path_one
     mat1.csv mat2.csv"), validates that the specified files exist and are .csv
     files, and dispatches the task to either [send_one_matrix] or
     [send_two_matrix] depending on the operation. Raises Failure if file paths
-    are invalid or operations are unknown. *)
+    are invalid or operations are unknown. This function is in the front end
+    because it requires writing output to the user, and non-output functionality
+    is abstracted away.*)
 let process_job out_channel job =
   let rest_string = ref (String.lowercase_ascii job) in
   let matrix_type = parse_matrix_type rest_string in
   let matrix_op = process_op rest_string in
   let first_matrix_path = parse_path rest_string in
-  if matrix_op = "transpose" then
-    let%lwt () = Lwt_io.printlf "Sending job: %s" job in
-    send_matrix matrix_type matrix_op None first_matrix_path None out_channel
-  else if matrix_op = "scale" then
+  if matrix_op = "scale" then
     let scale_opt = parse_scale rest_string in
     if matrix_type = "int" then
       let () = check_scalar_int scale_opt in
@@ -69,7 +70,9 @@ let process_job out_channel job =
       (Some second_matrix_path) out_channel
 
 (**[send_job server_out] reads a job from the client, processes it with
-   [process_job],a nd sends the job to the server, handling any errors *)
+   [process_job], and sends the job to the server, handling any errors and
+   printing a helpful message to the user. This function is in the front end
+   because it requires writing to the server and to the user*)
 let rec send_job server_out =
   match%lwt Lwt_io.read_line_opt Lwt_io.stdin with
   | Some job ->
@@ -97,6 +100,9 @@ let rec send_job server_out =
       send_job server_out
   | None -> Lwt_io.printl "Input closed (EOF). Stopping sends."
 
+(**[receive_responses server_in] reads a response from server_in, and prints the
+   result to the user. This function is in the front end because it requires
+   reading from the server's channel and printing to the user.*)
 let rec receive_responses server_in =
   let%lwt response_opt = Lwt_io.read_line_opt server_in in
   match response_opt with
@@ -137,11 +143,13 @@ let rec receive_responses server_in =
       print_endline "Server Closed";
       Lwt.return_unit
 
+(**[client_loop server_in server_out] loops to receive responses or send jobs.
+   This is in the front end because it requires Lwt.*)
 let client_loop server_in server_out =
   Lwt.choose [ send_job server_out; receive_responses server_in ]
 
-(** int add path1 path2 -> int add *)
-
+(**[run_client ipaddr port] starts a client on [ipaddr] with [port]. This is in
+   the front end because it requires networking.*)
 let run_client ipaddr port =
   let head () =
     try%lwt
@@ -166,7 +174,7 @@ let run_client ipaddr port =
   in
   Lwt_main.run (head ())
 
-(** Program entry point.*)
+(** Program entry point*)
 let _ =
   let print_usage () =
     Printf.printf "Usage: %s Server_IP Server_port\n" Sys.argv.(0)

@@ -37,9 +37,6 @@ let return_matrix valuetype op server_in =
           let%lwt mat = read_int_matrix_input server_in in
           Lwt.return
             (IntMatrix (IntegerMatrixOperations.scale (int_of_string k) mat))
-      | "transpose" ->
-          let%lwt mat = read_int_matrix_input server_in in
-          Lwt.return (IntMatrix (IntegerMatrixOperations.transpose mat))
       | _ -> failwith "not an implemented function")
   | "float" -> (
       let%lwt () = Lwt_io.printl "received float job" in
@@ -61,9 +58,6 @@ let return_matrix valuetype op server_in =
           let%lwt mat = read_float_matrix_input server_in in
           Lwt.return
             (FloatMatrix (FloatMatrixOperations.scale (float_of_string k) mat))
-      | "transpose" ->
-          let%lwt mat = read_float_matrix_input server_in in
-          Lwt.return (FloatMatrix (FloatMatrixOperations.transpose mat))
       | _ -> failwith "not an implemented function")
   | _ -> failwith "not an implemented type"
 
