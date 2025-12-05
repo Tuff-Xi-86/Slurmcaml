@@ -21,6 +21,13 @@ let sock_addr_to_string (add : Unix.sockaddr) =
   | ADDR_INET (a, port) -> Unix.string_of_inet_addr a ^ ":" ^ string_of_int port
   | _ -> failwith "unsupported"
 
+(**[print_headers client_out provided_op jtype] prints a header to a worker with
+   the job type and operator. In the front end because it requires I/O. *)
+let print_headers client_out provided_op jtype =
+  let%lwt () = Lwt_io.fprintl client_out "job" in
+  let%lwt () = Lwt_io.fprintl client_out jtype in
+  Lwt_io.fprintl client_out provided_op
+
 (**[dispatch_job split] takes a job split, and transmits each worker its portion
    of the work, along with information about what kind of job it is. This
    function is in the front end because it requires directly producing input and
@@ -38,14 +45,10 @@ let dispatch_job split =
   | IntJobASMSplit a ->
       let chunks = Array.to_list a in
       let workers = determine_workers chunks in
-      let%lwt () = Lwt_io.printl (string_of_int (List.length workers)) in
-      let%lwt () = Lwt_io.printl (string_of_int (List.length chunks)) in
       let work_pairs = List.combine chunks workers in
       Lwt_list.iter_s
         (fun (chunk, (key, (username, client_in, client_out, _))) ->
-          let%lwt () = Lwt_io.fprintl client_out "job" in
-          let%lwt () = Lwt_io.fprintl client_out "int" in
-          let%lwt () = Lwt_io.fprintlf client_out "%s" chunk.opi in
+          let%lwt () = print_headers client_out chunk.opi "int" in
           let%lwt () = print_matrix (IntMatrix chunk.aint) client_out in
           print_matrix (IntMatrix chunk.bint) client_out)
         work_pairs
@@ -55,9 +58,7 @@ let dispatch_job split =
       let work_pairs = List.combine chunks workers in
       Lwt_list.iter_s
         (fun (chunk, (key, (username, client_in, client_out, _))) ->
-          let%lwt () = Lwt_io.fprintl client_out "job" in
-          let%lwt () = Lwt_io.fprintl client_out "float" in
-          let%lwt () = Lwt_io.fprintlf client_out "%s" chunk.opf in
+          let%lwt () = print_headers client_out chunk.opf "float" in
           let%lwt () = print_matrix (FloatMatrix chunk.afloat) client_out in
           print_matrix (FloatMatrix chunk.bfloat) client_out)
         work_pairs
@@ -68,9 +69,7 @@ let dispatch_job split =
       Lwt_list.iter_s
         (fun ((chunk : int_job_s), (key, (username, client_in, client_out, _)))
            ->
-          let%lwt () = Lwt_io.fprintl client_out "job" in
-          let%lwt () = Lwt_io.fprintl client_out "int" in
-          let%lwt () = Lwt_io.fprintlf client_out "scale" in
+          let%lwt () = print_headers client_out "scale" "int" in
           let%lwt () = Lwt_io.fprintlf client_out "%d" chunk.scalar in
           print_matrix (IntMatrix chunk.aint) client_out)
         work_pairs
@@ -79,11 +78,8 @@ let dispatch_job split =
       let workers = determine_workers chunks in
       let work_pairs = List.combine chunks workers in
       Lwt_list.iter_s
-        (fun ((chunk : float_job_s), (key, (username, client_in, client_out, _)))
-           ->
-          let%lwt () = Lwt_io.fprintl client_out "job" in
-          let%lwt () = Lwt_io.fprintl client_out "float" in
-          let%lwt () = Lwt_io.fprintlf client_out "scale" in
+        (fun (chunk, (key, (username, client_in, client_out, _))) ->
+          let%lwt () = print_headers client_out "scale" "float" in
           let%lwt () = Lwt_io.fprintlf client_out "%f" chunk.scalar in
           print_matrix (FloatMatrix chunk.afloat) client_out)
         work_pairs
@@ -251,8 +247,8 @@ let handle_float_job_s tbl work counter client_in key =
 (**[handle_failure client_in] handles a worker reporting a failure in an
    operation. This function is in the front end because it requires interfacing
    with a worker's channel and the client's channel.*)
-let handle_failure failure =
-  let%lwt () = Lwt_io.fprintl !head_props "Failure" in
+let handle_failure failure username =
+  let%lwt () = Lwt_io.fprintlf !head_props "%s reports failure" username in
   Lwt_io.fprintl !head_props failure
 
 (**[handle_none key username] handles a worker disconnecting. This function is
@@ -280,9 +276,10 @@ let handle_worker_connection instanceName key client_in client_out =
         let%lwt () = handle_none key username in
         flag := true;
         handle_failure "Some worker disconnected mid job. Your job failed."
+          username
     | Some "Failure" ->
         let%lwt failure = Lwt_io.read_line client_in in
-        let%lwt () = handle_failure failure in
+        let%lwt () = handle_failure failure username in
         handle_status ()
     | Some status -> (
         match !assignment_table with
