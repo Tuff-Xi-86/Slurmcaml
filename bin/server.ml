@@ -5,7 +5,7 @@ open Slurmcaml.Matrixutils
 let worker_table = Hashtbl.create 10
 
 (** Keeps track of the client's channel *)
-let head_props = ref Lwt_io.stdout
+let head_props = ref Lwt_io.null
 
 (** Tracks the job type, the worker assignments, the result matrix, and the
     number of workers who have finished their work *)
@@ -122,6 +122,7 @@ let rec handle_jobs_from_client client_in client_out key =
   match job_opt with
   | None ->
       let%lwt () = Lwt_io.printlf "CLIENT node %s disconnected." key in
+      head_props := Lwt_io.null;
       Lwt.return_unit
   | Some "job" ->
       let%lwt () = Lwt_io.printlf "Received job from %s" key in
@@ -283,7 +284,7 @@ let client_handler client_socket_address (client_in, client_out) =
   match node_type_opt with
   | None ->
       let%lwt () =
-        Lwt_io.printlf "Client %s disconnected before sending node type." key
+        Lwt_io.printlf "Node %s disconnected before sending node type." key
       in
       Lwt.return_unit
   | Some node_type -> (
