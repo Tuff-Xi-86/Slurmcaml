@@ -49,3 +49,5 @@ float subtract mat1.csv mat2.csv
 float scale mat1.csv 10
 float multiply mat1.csv mat2.csv
 ```
+
+A matrix will be returned from the server with first the number of rows, then the number of columns, both on new lines, followed by the matrix itself, in csv format.
