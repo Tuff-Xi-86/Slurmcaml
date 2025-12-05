@@ -230,6 +230,24 @@ let tests =
            let expected = ("hello", "world program") in
            let actual = split_first_space "hello world program" in
            assert_equal expected actual );
+         ( "test check_scalar_float with invalid argument" >:: fun _ ->
+           assert_raises
+             (InvalidMatrixArgument
+                "Matrix scalar must be an float / match that of your matrix \
+                 type") (fun () -> check_scalar_float "a") );
+         ( "test check_scalar_float with valid argument" >:: fun _ ->
+           let expected = () in
+           let actual = check_scalar_float ".0" in
+           assert_equal expected actual );
+         ( "test check_scalar_int with invalid argument" >:: fun _ ->
+           assert_raises
+             (InvalidMatrixArgument
+                "Matrix scalar must be an float / match that of your matrix \
+                 type") (fun () -> check_scalar_float "a") );
+         ( "test check_scalar_float with valid argument" >:: fun _ ->
+           let expected = () in
+           let actual = check_scalar_int "0" in
+           assert_equal expected actual );
        ]
 
 let _ = run_test_tt_main tests
