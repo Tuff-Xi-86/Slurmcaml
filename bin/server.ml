@@ -1,4 +1,5 @@
 open Slurmcaml.Matrixutils
+(* too many workers and worker quits mid execution*)
 
 (** Tracks all the workers currently connected to the server *)
 let worker_table = Hashtbl.create 10
@@ -271,6 +272,11 @@ let handle_worker_connection instanceName key client_in client_out =
   in
   handle_status ()
 
+(**[client_handler client_socket_address (client_in, client_out)] handles a node
+   connecting to the server, and dispatches to [handle_worker_connection] and
+   [handle_jobs_from_client] depending on the type of the node. This function is
+   in the front end because it requires interfacing with networking between
+   nodes.*)
 let client_handler client_socket_address (client_in, client_out) =
   let key = sock_addr_to_string client_socket_address in
   let%lwt node_type_opt = Lwt_io.read_line_opt client_in in
@@ -292,8 +298,8 @@ let client_handler client_socket_address (client_in, client_out) =
       | instanceName ->
           handle_worker_connection instanceName key client_in client_out)
 
-(*Portion is tuple, first row - last row(Non inclusive), Res is result. Need
-  function that fills in matrix given the result matrix and portion*)
+(**[run_server ipaddr port] starts a server on [ipaddr] with [port]. This
+   function is in the front end because it requires starting a server.*)
 let run_server ipaddr port =
   let server () =
     let%lwt () = Lwt_io.printlf "Starting Server..." in
@@ -315,6 +321,7 @@ let run_server ipaddr port =
   in
   Lwt_main.run (server ())
 
+(**Program entry point*)
 let _ =
   let print_usage () =
     Printf.printf "Usage:\n %s <server | client>\n" Sys.argv.(0)

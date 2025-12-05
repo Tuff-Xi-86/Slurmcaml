@@ -1,21 +1,16 @@
 open Slurmcaml.Functions
 open Slurmcaml.Matrixutils
 
-(* TODO stuff: evaluate functions and implement map, do error checking on
-   matrices, fix usage stuff at bottom*)
-
-(* unix util funcs *)
+(**[sock_addr_to_string] converts a unix socket address to a string*)
 let sock_addr_to_string (add : Unix.sockaddr) =
   match add with
   | ADDR_INET (a, port) -> Unix.string_of_inet_addr a ^ ":" ^ string_of_int port
   | _ -> failwith "unsupported"
 
-let format_status_string status job output =
-  Printf.sprintf "%s|%s|%s" status job output
-
-(*TODO: evaluate functions & implement MAP*)
-
-(* reads a matrix from input channel and *)
+(**[return_matrix valuetype op server_in] checks the int or float type of the
+   matrix, and based on the operation, dispatches to the appropriate read matrix
+   functions, and calls the matrix operation function. This function is in the
+   front end because it requires reading from input channels.*)
 let return_matrix valuetype op server_in =
   match valuetype with
   | "int" -> (
@@ -61,11 +56,11 @@ let return_matrix valuetype op server_in =
       | _ -> failwith "not an implemented function")
   | _ -> failwith "not an implemented type"
 
-(* this currently reads a matrix (sent in the form of a csv) from what the
-   server has written to the user, along with the value type of the matrix and
-   the operation to perform, computes the operation, and writes the result to
-   the server's out, followed by done head node will need to send only the work
-   that this node should do, along with the parameters above*)
+(**[run_client ipaddr port instanceName] starts a worker on [ipaddr] with [port]
+   and [instanceName]. It handles jobs from the server and dispatches to the
+   [return_matrix] function. This function is in the front end because it
+   requires starting up a worker on the network and reading input/producing
+   output.*)
 let run_client ipaddr port instanceName =
   let client () =
     let%lwt () = Lwt_io.printl "Attempting to connect to Server..." in
@@ -85,7 +80,6 @@ let run_client ipaddr port instanceName =
     in
     let%lwt () = Lwt_io.fprintlf server_out "%s" instanceName in
     let%lwt () = Lwt_io.flush server_out in
-
     let rec handle_job () =
       let%lwt job_opt = Lwt_io.read_line_opt server_in in
       match job_opt with
@@ -115,6 +109,7 @@ let run_client ipaddr port instanceName =
   in
   Lwt_main.run (client ())
 
+(**Program entry point*)
 let _ =
   let print_usage () =
     Printf.printf "Usage: %s <server | client>\n" Sys.argv.(0)

@@ -18,7 +18,7 @@ let send_matrix matrix_type matrix_op optional_scale matrix_path_one
     match matrix_type with
     | "int" -> read_int_matrix_from_file path
     | "float" -> read_float_matrix_from_file path
-    | _ -> failwith "Invalid matrix_type in send_matrix"
+    | _ -> exit 0
   in
   let matrix_one = read_matrix matrix_path_one in
   let matrix_two =
