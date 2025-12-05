@@ -92,7 +92,6 @@ let run_client ipaddr port instanceName =
               let%lwt () = Lwt_io.printlf "Received job: %s" job in
               let%lwt valuetype = Lwt_io.read_line server_in in
               let%lwt op = Lwt_io.read_line server_in in
-              let%lwt () = Lwt_unix.sleep 3.0 in
               let%lwt res = return_matrix valuetype op server_in in
               let%lwt () = Lwt_io.printlf "Completed job: %s" job in
               let%lwt () = Lwt_io.fprintl server_out "result" in

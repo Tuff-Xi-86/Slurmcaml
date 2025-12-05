@@ -1,7 +1,5 @@
 open Slurmcaml.Matrixutils
 
-exception InvalidMatrixArgument of string
-
 let start_time = ref (Unix.gettimeofday ())
 let end_time = ref (Unix.gettimeofday ())
 
