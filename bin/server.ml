@@ -1,24 +1,32 @@
 open Slurmcaml.Matrixutils
+(* too many workers and worker quits mid execution*)
 
-let users = Hashtbl.create 10
-let head_props = ref Lwt_io.stdout
-let jobs = Queue.create ()
+(** Tracks all the workers currently connected to the server *)
+let worker_table = Hashtbl.create 10
 
-(* this is tracking the job type, the worker assignments, the result matrix, and
-   the number of workers who have finished their work *)
+(** Keeps track of the client's channel *)
+let head_props = ref Lwt_io.null
+
+(** Track if some worker disconnected mid job*)
+let flag = ref false
+
+(** Tracks the job type, the worker assignments, the result matrix, and the
+    number of workers who have finished their work *)
 let assignment_table =
   ref (IntJobASMType, Hashtbl.create 10, IntMatrix [| [| 0 |] |], 0)
 
+(** Converts a socked address to string *)
 let sock_addr_to_string (add : Unix.sockaddr) =
   match add with
   | ADDR_INET (a, port) -> Unix.string_of_inet_addr a ^ ":" ^ string_of_int port
   | _ -> failwith "unsupported"
 
-(*Portion is tuple, first row - last row(Non inclusive), Res is result. Need
-  function that fills in matrix given the result matrix and portion, Updates
-  assignment_table*)
+(**[dispatch_job split] takes a job split, and transmits each worker its portion
+   of the work, along with information about what kind of job it is. This
+   function is in the front end because it requires directly producing input and
+   output to the workers.*)
 let dispatch_job split =
-  let workers = List.of_seq (Hashtbl.to_seq users) in
+  let workers = List.of_seq (Hashtbl.to_seq worker_table) in
   match split with
   | IntJobASMSplit a ->
       let chunks = Array.to_list a in
@@ -67,6 +75,10 @@ let dispatch_job split =
           print_matrix (FloatMatrix chunk.afloat) client_out)
         work_pairs
 
+(** [process_job in_channel] processes a job sent from the client on
+    [in_channel], producing a job as the result with the one or two matrices and
+    operator. This function is in the front end because it requires processing
+    directly from the in_channel. *)
 let process_job in_channel =
   let%lwt valuetype = Lwt_io.read_line in_channel in
   let%lwt op = Lwt_io.read_line in_channel in
@@ -103,17 +115,24 @@ let process_job in_channel =
       | _ -> failwith "TODO Transpose")
   | _ -> failwith "not a supported type"
 
+(**[handle_jobs_from_client client_in client_out key] waits for the client to
+   send a job, and when they do, calls [process_job] to turn it into a job,
+   splits the job based on its type, and then dispatches it to the workers. This
+   function is in the front end because it requires parsing input from the
+   client with Lwt.*)
 let rec handle_jobs_from_client client_in client_out key =
   let%lwt job_opt = Lwt_io.read_line_opt client_in in
   match job_opt with
   | None ->
       let%lwt () = Lwt_io.printlf "CLIENT node %s disconnected." key in
+      head_props := Lwt_io.null;
       Lwt.return_unit
   | Some "job" ->
       let%lwt () = Lwt_io.printlf "Received job from %s" key in
+      let () = flag := false in
       let%lwt job = process_job client_in in
       let%lwt () = Lwt_io.printl "processed job" in
-      if Hashtbl.length users = 0 then
+      if Hashtbl.length worker_table = 0 then
         let%lwt () =
           Lwt_io.printl "ERROR: There are no worker nodes available"
         in
@@ -123,13 +142,13 @@ let rec handle_jobs_from_client client_in client_out key =
         in
         handle_jobs_from_client client_in client_out key
       else
-        let () = assignment_table := determine_assignments job users in
+        let () = assignment_table := determine_assignments job worker_table in
         let split =
           match job with
-          | IntJobASM i -> split_int_job_asm (Hashtbl.length users) i
-          | FloatJobASM j -> split_float_job_asm (Hashtbl.length users) j
-          | IntJobS i -> split_int_job_s (Hashtbl.length users) i
-          | FloatJobS j -> split_float_job_s (Hashtbl.length users) j
+          | IntJobASM i -> split_int_job_asm (Hashtbl.length worker_table) i
+          | FloatJobASM j -> split_float_job_asm (Hashtbl.length worker_table) j
+          | IntJobS i -> split_int_job_s (Hashtbl.length worker_table) i
+          | FloatJobS j -> split_float_job_s (Hashtbl.length worker_table) j
         in
         let%lwt () = dispatch_job split in
         handle_jobs_from_client client_in client_out key
@@ -140,72 +159,117 @@ let rec handle_jobs_from_client client_in client_out key =
       in
       handle_jobs_from_client client_in client_out key
 
+(**[handle_int_ASM_job tbl work counter client_in_key] processes a partial
+   result from a worker in a int add, subtract, or multiply operation and
+   updates the assignment table with the new number of workers that have
+   finishes and the new work matrix. If the worker is the last worker, it prints
+   the result to the client. This function is in the front end because it
+   requires parsing input from a worker and printing to client.*)
 let handle_int_ASM_job tbl work counter client_in key =
   let%lwt res = read_int_matrix_input client_in in
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_int res portion work in
   assignment_table := (IntJobASMType, tbl, IntMatrix work, counter + 1);
-  if counter + 1 = Hashtbl.length users then
-    let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
-    let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
-    print_matrix (IntMatrix work) !head_props
+  if not !flag then
+    if counter + 1 = Hashtbl.length worker_table then
+      let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
+      let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
+      print_matrix (IntMatrix work) !head_props
+    else Lwt.return_unit
   else Lwt.return ()
 
+(**[handle_float_ASM_job tbl work counter client_in key] processes a partial
+   result from a worker in a float add, subtract, or multiply operation and
+   updates the assignment table with the new number of workers that have
+   finishes and the new work matrix. If the worker is the last worker, it prints
+   the result to the client. This function is in the front end because it
+   requires parsing input from a worker and printing to client.*)
 let handle_float_ASM_job tbl work counter client_in key =
   let%lwt res = read_float_matrix_input client_in in
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_float res portion work in
   assignment_table := (FloatJobASMType, tbl, FloatMatrix work, counter + 1);
-  if counter + 1 = Hashtbl.length users then
-    let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
-    let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
-    print_matrix (FloatMatrix work) !head_props
+  if not !flag then
+    if counter + 1 = Hashtbl.length worker_table then
+      let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
+      let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
+      print_matrix (FloatMatrix work) !head_props
+    else Lwt.return_unit
   else Lwt.return ()
 
+(**[handle_int_job_s tbl work counter client_in key] processes a partial result
+   from a worker in a int scale operation and updates the assignment table with
+   the new number of workers that have finishes and the new work matrix. If the
+   worker is the last worker, it prints the result to the client. This function
+   is in the front end because it requires parsing input from a worker and
+   printing to client.*)
 let handle_int_job_s tbl work counter client_in key =
   let%lwt res = read_int_matrix_input client_in in
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_int res portion work in
   assignment_table := (IntJobSType, tbl, IntMatrix work, counter + 1);
-  if counter + 1 = Hashtbl.length users then
-    let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
-    let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
-    print_matrix (IntMatrix work) !head_props
+  if not !flag then
+    if counter + 1 = Hashtbl.length worker_table then
+      let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
+      let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
+      print_matrix (IntMatrix work) !head_props
+    else Lwt.return_unit
   else Lwt.return ()
 
+(**[handle_float_job_s tbl work counter client_in key] processes a partial
+   result from a worker in a float scale operation and updates the assignment
+   table with the new number of workers that have finishes and the new work
+   matrix. If the worker is the last worker, it prints the result to the client.
+   This function is in the front end because it requires parsing input from a
+   worker and printing to client.*)
 let handle_float_job_s tbl work counter client_in key =
   let%lwt res = read_float_matrix_input client_in in
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_float res portion work in
   assignment_table := (FloatJobSType, tbl, FloatMatrix work, counter + 1);
-  if counter + 1 = Hashtbl.length users then
-    let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
-    let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
-    print_matrix (FloatMatrix work) !head_props
+  if not !flag then
+    if counter + 1 = Hashtbl.length worker_table then
+      let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
+      let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
+      print_matrix (FloatMatrix work) !head_props
+    else Lwt.return_unit
   else Lwt.return ()
 
-let handle_failure client_in =
-  let%lwt failure = Lwt_io.read_line client_in in
+(**[handle_failure client_in] handles a worker reporting a failure in an
+   operation. This function is in the front end because it requires interfacing
+   with a worker's channel and the client's channel.*)
+let handle_failure failure =
   let%lwt () = Lwt_io.fprintl !head_props "Failure" in
   Lwt_io.fprintl !head_props failure
 
+(**[handle_none key username] handles a worker disconnecting. This function is
+   in the front end because it requires printing to output.*)
 let handle_none key username =
   let%lwt () = Lwt_io.printlf "%s (%S) disconnected." key username in
+  Hashtbl.remove worker_table key;
   Lwt.return_unit
 
+(**[handle_worker_connection instanceName key client_in client_out] handles a
+   worker with name [instanceName] connecting to the server and reporting
+   results from its work portion. This function is in the front end because it
+   requires handling server networking and reading input from a channel.*)
 let handle_worker_connection instanceName key client_in client_out =
   let username = instanceName in
   let%lwt () =
-    Hashtbl.replace users key (username, client_in, client_out, true);
+    Hashtbl.replace worker_table key (username, client_in, client_out, true);
     Lwt.return_unit
   in
   let%lwt () = Lwt_io.printlf "%s (%S) connected." key username in
   let rec handle_status () =
     let%lwt status = Lwt_io.read_line_opt client_in in
     match status with
-    | None -> handle_none key username
+    | None ->
+        let%lwt () = handle_none key username in
+        flag := true;
+        handle_failure "Some worker disconnected mid job. Your job failed."
     | Some "Failure" ->
-        let%lwt () = handle_failure client_in in
+        let%lwt failure = Lwt_io.read_line client_in in
+        let%lwt () = handle_failure failure in
         handle_status ()
     | Some status -> (
         match !assignment_table with
@@ -225,13 +289,18 @@ let handle_worker_connection instanceName key client_in client_out =
   in
   handle_status ()
 
+(**[client_handler client_socket_address (client_in, client_out)] handles a node
+   connecting to the server, and dispatches to [handle_worker_connection] and
+   [handle_jobs_from_client] depending on the type of the node. This function is
+   in the front end because it requires interfacing with networking between
+   nodes.*)
 let client_handler client_socket_address (client_in, client_out) =
   let key = sock_addr_to_string client_socket_address in
   let%lwt node_type_opt = Lwt_io.read_line_opt client_in in
   match node_type_opt with
   | None ->
       let%lwt () =
-        Lwt_io.printlf "Client %s disconnected before sending node type." key
+        Lwt_io.printlf "Node %s disconnected before sending node type." key
       in
       Lwt.return_unit
   | Some node_type -> (
@@ -246,8 +315,8 @@ let client_handler client_socket_address (client_in, client_out) =
       | instanceName ->
           handle_worker_connection instanceName key client_in client_out)
 
-(*Portion is tuple, first row - last row(Non inclusive), Res is result. Need
-  function that fills in matrix given the result matrix and portion*)
+(**[run_server ipaddr port] starts a server on [ipaddr] with [port]. This
+   function is in the front end because it requires starting a server.*)
 let run_server ipaddr port =
   let server () =
     let%lwt () = Lwt_io.printlf "Starting Server..." in
@@ -269,6 +338,7 @@ let run_server ipaddr port =
   in
   Lwt_main.run (server ())
 
+(**Program entry point*)
 let _ =
   let print_usage () =
     Printf.printf "Usage:\n %s <server | client>\n" Sys.argv.(0)
