@@ -12,6 +12,7 @@
 (test
  (name test_parsing)
  (libraries ounit2 slurmcaml lwt.unix)
+ (deps (glob_files_rec ../*))
 )
 
  (test
