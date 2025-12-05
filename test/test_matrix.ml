@@ -8,22 +8,22 @@ let tests =
            \   of even number and  divides equally"
          >:: fun _ ->
            assert_equal
-             (let array1 = [| 1; 2; 3; 4; 5; 6 |] in
-              split_matrix array1 3)
-             [| [| 1; 2 |]; [| 3; 4 |]; [| 5; 6 |] |] );
+             (let array1 = [| [| 1; 2 |]; [| 3; 4 |]; [| 5; 6 |] |] in
+              split_matrix array1 1)
+             [| [| [| 1; 2 |]; [| 3; 4 |]; [| 5; 6 |] |] |] );
          ( "testing split matrix when it has a length of odd number\n\
            \   and  divides unequally"
          >:: fun _ ->
            assert_equal
-             (let array1 = [| 1; 2; 3; 4; 5; 6; 7 |] in
-              split_matrix array1 3)
-             [| [| 1; 2; 3 |]; [| 4; 5 |]; [| 6; 7 |] |] );
+             (let array1 = [| [| 1; 2; 3 |]; [| 4; 5 |]; [| 6; 7 |] |] in
+              split_matrix array1 1)
+             [| [| [| 1; 2; 3 |]; [| 4; 5 |]; [| 6; 7 |] |] |] );
          ( "test split_int_job_asm when the matrix doesnt split evenly"
          >:: fun _ ->
            let job =
              {
-               aint = split_matrix [| 1; 2; 3; 4; 5; 6; 7 |] 3;
-               bint = split_matrix [| 10; 20; 30; 40; 50; 60; 70 |] 3;
+               aint = [| [| 1; 2; 3 |]; [| 4; 5 |]; [| 6; 7 |] |];
+               bint = [| [| 10; 20; 30 |]; [| 40; 50 |]; [| 60; 70 |] |];
                opi = "add";
              }
            in
@@ -47,8 +47,8 @@ let tests =
          >:: fun _ ->
            let job =
              {
-               aint = split_matrix [| 1; 2; 3; 4; 5; 6 |] 3;
-               bint = split_matrix [| 10; 20; 30; 40; 50; 60 |] 3;
+               aint = [| [| 1; 2 |]; [| 3; 4 |]; [| 5; 6 |] |];
+               bint = [| [| 10; 20 |]; [| 30; 40 |]; [| 50; 60 |] |];
                opi = "add";
              }
            in
@@ -69,7 +69,7 @@ let tests =
          >:: fun _ ->
            let job =
              {
-               aint = split_matrix [| 1; 2; 3; 4; 5; 6 |] 3;
+               aint = [| [| 1; 2 |]; [| 3; 4 |]; [| 5; 6 |] |];
                bint = [| [| 10; 20; 30; 40; 50; 60 |] |];
                opi = "multiply";
              }
@@ -102,8 +102,8 @@ let tests =
          >:: fun _ ->
            let job =
              {
-               afloat = split_matrix [| 1.; 2.; 3.; 4.; 5.; 6. |] 3;
-               bfloat = split_matrix [| 10.; 20.; 30.; 40.; 50.; 60. |] 3;
+               afloat = [| [| 1.; 2. |]; [| 3.; 4. |]; [| 5.; 6. |] |];
+               bfloat = [| [| 10.; 20. |]; [| 30.; 40. |]; [| 50.; 60. |] |];
                opf = "add";
              }
            in
@@ -136,7 +136,7 @@ let tests =
          >:: fun _ ->
            let job =
              {
-               afloat = split_matrix [| 1.; 2.; 3.; 4.; 5.; 6. |] 3;
+               afloat = [| [| 1.; 2. |]; [| 3.; 4. |]; [| 5.; 6. |] |];
                bfloat = [| [| 10.; 20.; 30.; 40.; 50.; 60. |] |];
                opf = "multiply";
              }
