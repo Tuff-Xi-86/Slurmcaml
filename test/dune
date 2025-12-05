@@ -13,3 +13,7 @@
  (name test_parsing)
  (libraries ounit2 slurmcaml lwt.unix)
 )
+
+ (test
+ (name test_matrix)
+ (libraries ounit2 slurmcaml))

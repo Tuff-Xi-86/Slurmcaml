@@ -7,6 +7,9 @@ let worker_table = Hashtbl.create 10
 (** Keeps track of the client's channel *)
 let head_props = ref Lwt_io.null
 
+(** Track if some worker disconnected mid job*)
+let flag = ref false
+
 (** Tracks the job type, the worker assignments, the result matrix, and the
     number of workers who have finished their work *)
 let assignment_table =
@@ -126,6 +129,7 @@ let rec handle_jobs_from_client client_in client_out key =
       Lwt.return_unit
   | Some "job" ->
       let%lwt () = Lwt_io.printlf "Received job from %s" key in
+      let () = flag := false in
       let%lwt job = process_job client_in in
       let%lwt () = Lwt_io.printl "processed job" in
       if Hashtbl.length worker_table = 0 then
@@ -166,10 +170,12 @@ let handle_int_ASM_job tbl work counter client_in key =
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_int res portion work in
   assignment_table := (IntJobASMType, tbl, IntMatrix work, counter + 1);
-  if counter + 1 = Hashtbl.length worker_table then
-    let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
-    let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
-    print_matrix (IntMatrix work) !head_props
+  if not !flag then
+    if counter + 1 = Hashtbl.length worker_table then
+      let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
+      let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
+      print_matrix (IntMatrix work) !head_props
+    else Lwt.return_unit
   else Lwt.return ()
 
 (**[handle_float_ASM_job tbl work counter client_in key] processes a partial
@@ -183,10 +189,12 @@ let handle_float_ASM_job tbl work counter client_in key =
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_float res portion work in
   assignment_table := (FloatJobASMType, tbl, FloatMatrix work, counter + 1);
-  if counter + 1 = Hashtbl.length worker_table then
-    let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
-    let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
-    print_matrix (FloatMatrix work) !head_props
+  if not !flag then
+    if counter + 1 = Hashtbl.length worker_table then
+      let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
+      let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
+      print_matrix (FloatMatrix work) !head_props
+    else Lwt.return_unit
   else Lwt.return ()
 
 (**[handle_int_job_s tbl work counter client_in key] processes a partial result
@@ -200,10 +208,12 @@ let handle_int_job_s tbl work counter client_in key =
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_int res portion work in
   assignment_table := (IntJobSType, tbl, IntMatrix work, counter + 1);
-  if counter + 1 = Hashtbl.length worker_table then
-    let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
-    let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
-    print_matrix (IntMatrix work) !head_props
+  if not !flag then
+    if counter + 1 = Hashtbl.length worker_table then
+      let%lwt () = Lwt_io.fprintl !head_props "INT_JOB_OUTPUT" in
+      let%lwt () = print_matrix (IntMatrix work) Lwt_io.stdout in
+      print_matrix (IntMatrix work) !head_props
+    else Lwt.return_unit
   else Lwt.return ()
 
 (**[handle_float_job_s tbl work counter client_in key] processes a partial
@@ -217,17 +227,18 @@ let handle_float_job_s tbl work counter client_in key =
   let portion = Hashtbl.find tbl key in
   let () = fill_matrix_float res portion work in
   assignment_table := (FloatJobSType, tbl, FloatMatrix work, counter + 1);
-  if counter + 1 = Hashtbl.length worker_table then
-    let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
-    let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
-    print_matrix (FloatMatrix work) !head_props
+  if not !flag then
+    if counter + 1 = Hashtbl.length worker_table then
+      let%lwt () = Lwt_io.fprintl !head_props "FLOAT_JOB_OUTPUT" in
+      let%lwt () = print_matrix (FloatMatrix work) Lwt_io.stdout in
+      print_matrix (FloatMatrix work) !head_props
+    else Lwt.return_unit
   else Lwt.return ()
 
 (**[handle_failure client_in] handles a worker reporting a failure in an
    operation. This function is in the front end because it requires interfacing
    with a worker's channel and the client's channel.*)
-let handle_failure client_in =
-  let%lwt failure = Lwt_io.read_line client_in in
+let handle_failure failure =
   let%lwt () = Lwt_io.fprintl !head_props "Failure" in
   Lwt_io.fprintl !head_props failure
 
@@ -235,6 +246,7 @@ let handle_failure client_in =
    in the front end because it requires printing to output.*)
 let handle_none key username =
   let%lwt () = Lwt_io.printlf "%s (%S) disconnected." key username in
+  Hashtbl.remove worker_table key;
   Lwt.return_unit
 
 (**[handle_worker_connection instanceName key client_in client_out] handles a
@@ -251,9 +263,13 @@ let handle_worker_connection instanceName key client_in client_out =
   let rec handle_status () =
     let%lwt status = Lwt_io.read_line_opt client_in in
     match status with
-    | None -> handle_none key username
+    | None ->
+        let%lwt () = handle_none key username in
+        flag := true;
+        handle_failure "Some worker disconnected mid job. Your job failed."
     | Some "Failure" ->
-        let%lwt () = handle_failure client_in in
+        let%lwt failure = Lwt_io.read_line client_in in
+        let%lwt () = handle_failure failure in
         handle_status ()
     | Some status -> (
         match !assignment_table with
