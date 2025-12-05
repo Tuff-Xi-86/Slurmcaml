@@ -247,9 +247,7 @@ let handle_float_job_s tbl work counter client_in key =
 (**[handle_failure client_in] handles a worker reporting a failure in an
    operation. This function is in the front end because it requires interfacing
    with a worker's channel and the client's channel.*)
-let handle_failure failure username =
-  let%lwt () = Lwt_io.fprintlf !head_props "%s reports failure" username in
-  Lwt_io.fprintl !head_props failure
+let handle_failure failure username = Lwt_io.fprintl !head_props failure
 
 (**[handle_none key username] handles a worker disconnecting. This function is
    in the front end because it requires printing to output.*)
@@ -275,7 +273,8 @@ let handle_worker_connection instanceName key client_in client_out =
     | None ->
         let%lwt () = handle_none key username in
         flag := true;
-        handle_failure "Some worker disconnected mid job. Your job failed."
+        handle_failure
+          "Some worker disconnected. If you were mid job, your job failed."
           username
     | Some "Failure" ->
         let%lwt failure = Lwt_io.read_line client_in in
