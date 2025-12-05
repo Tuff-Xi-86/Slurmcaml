@@ -248,6 +248,101 @@ let tests =
            let expected = () in
            let actual = check_scalar_int "0" in
            assert_equal expected actual );
+         ( "test determine assignments int job asm" >:: fun _ ->
+           let job =
+             IntJobASM
+               {
+                 aint = [| [| 1; 2 |]; [| 3; 4 |] |];
+                 bint = [| [| 1; 2 |]; [| 3; 4 |] |];
+                 opi = "add";
+               }
+           in
+           let users = Hashtbl.create 10 in
+           let () =
+             Hashtbl.add users "127" ("dummy", Lwt_io.null, Lwt_io.null, true)
+           in
+           let () =
+             Hashtbl.add users "1272" ("dummy2", Lwt_io.null, Lwt_io.null, true)
+           in
+           let expectedtbl = Hashtbl.create 10 in
+           let () = Hashtbl.add expectedtbl "127" (0, 1) in
+           let () = Hashtbl.add expectedtbl "1272" (1, 2) in
+           let actual = determine_assignments job users in
+           match actual with
+           | kind, tbl, matrix, count ->
+               assert_equal kind IntJobASMType;
+               assert_equal (IntMatrix [| [| 0; 0 |]; [| 0; 0 |] |]) matrix;
+               assert_equal count 0 );
+         ( "test determine assignments" >:: fun _ ->
+           let job =
+             FloatJobASM
+               {
+                 afloat = [| [| 1.; 2. |]; [| 3.; 4. |] |];
+                 bfloat = [| [| 1.; 2. |]; [| 3.; 4. |] |];
+                 opf = "add";
+               }
+           in
+           let users = Hashtbl.create 10 in
+           let () =
+             Hashtbl.add users "127" ("dummy", Lwt_io.null, Lwt_io.null, true)
+           in
+           let () =
+             Hashtbl.add users "1272" ("dummy2", Lwt_io.null, Lwt_io.null, true)
+           in
+           let expectedtbl = Hashtbl.create 10 in
+           let () = Hashtbl.add expectedtbl "127" (0, 1) in
+           let () = Hashtbl.add expectedtbl "1272" (1, 2) in
+           let actual = determine_assignments job users in
+           match actual with
+           | kind, tbl, matrix, count ->
+               assert_equal kind FloatJobASMType;
+               assert_equal
+                 (FloatMatrix [| [| 0.; 0. |]; [| 0.; 0. |] |])
+                 matrix;
+               assert_equal count 0 );
+         ( "test determine assignments int job scale" >:: fun _ ->
+           let job =
+             IntJobS { aint = [| [| 1; 2 |]; [| 3; 4 |] |]; scalar = 3 }
+           in
+           let users = Hashtbl.create 10 in
+           let () =
+             Hashtbl.add users "127" ("dummy", Lwt_io.null, Lwt_io.null, true)
+           in
+           let () =
+             Hashtbl.add users "1272" ("dummy2", Lwt_io.null, Lwt_io.null, true)
+           in
+           let expectedtbl = Hashtbl.create 10 in
+           let () = Hashtbl.add expectedtbl "127" (0, 1) in
+           let () = Hashtbl.add expectedtbl "1272" (1, 2) in
+           let actual = determine_assignments job users in
+           match actual with
+           | kind, tbl, matrix, count ->
+               assert_equal kind IntJobSType;
+               assert_equal (IntMatrix [| [| 0; 0 |]; [| 0; 0 |] |]) matrix;
+               assert_equal count 0 );
+         ( "test determine assignments float job scale" >:: fun _ ->
+           let job =
+             FloatJobS
+               { afloat = [| [| 1.; 2. |]; [| 3.; 4. |] |]; scalar = 3. }
+           in
+           let users = Hashtbl.create 10 in
+           let () =
+             Hashtbl.add users "127" ("dummy", Lwt_io.null, Lwt_io.null, true)
+           in
+           let () =
+             Hashtbl.add users "1272" ("dummy2", Lwt_io.null, Lwt_io.null, true)
+           in
+           let expectedtbl = Hashtbl.create 10 in
+           let () = Hashtbl.add expectedtbl "127" (0, 1) in
+           let () = Hashtbl.add expectedtbl "1272" (1, 2) in
+           let actual = determine_assignments job users in
+           match actual with
+           | kind, tbl, matrix, count ->
+               assert_equal kind FloatJobSType;
+               assert_equal
+                 (FloatMatrix [| [| 0.; 0. |]; [| 0.; 0. |] |])
+                 matrix;
+               assert_equal count 0 );
        ]
 
 let _ = run_test_tt_main tests
