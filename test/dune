@@ -8,3 +8,8 @@
  (libraries ounit2 slurmcaml lwt.unix)
  (preprocess (pps lwt_ppx))
 )
+
+(test
+ (name test_parsing)
+ (libraries ounit2 slurmcaml lwt.unix)
+)
